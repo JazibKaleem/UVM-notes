@@ -1,0 +1,1714 @@
+UVM notes:
+
+concept of uvm_factory?
+in-built methods in uvm_factory?
+
+uvm_root
+uvm_void
+
+uvm_object?
+extended from?
+extends to uvm_sequence <- uvm_sequence_item <- uvm_sequence_base
+
+uvm_void <- uvm_object <- uvm_report_object <- uvm_component
+
+uvm_component?
+extends to driver, monitor, sequencer, agent, test, env, random_stimulus, scoreboard, subscriber
+
+polymorphism in uvm classes? 
+polymorphism in classes extending from uvm_component?
+
+Sequencer:
+Similar to SystemVerilog generator
+Sends the sequence (stimulus) to driver
+Multiple sequences can be trying to send sequence_item's to the driver. Sequencer arbitrates between them.
+Sequencer grants access to one sequence at a time
+
+Driver:
+Converts the sequence in transactions to signal level model and send it through to the DUT
+
+SystemVerilog test bench structure has the driver also connected to the scoreboard
+
+UVM has 2 major elements:
+	- components
+		get created at the beginning of the simulation and will exist for the complete simulation time
+	- objects
+		get created during simulation e.g. packets and sequences
+		
+		
+UVM hierarchy:
+
+top
+	uvm_root
+		test
+			env, scoreboard
+				agent
+					driver, sequencer, monitor 
+					
+top:
+	- static container responsible for rst and clk generation
+	- imports uvm_pkg
+	- factory registration of interface
+	- calling the test
+	
+uvm_root: (talking about uvm_factory)
+	- 
+	
+test: extends from uvm_test
+	- uvm_test is extended for creating user specific tests to verify the design
+	
+env: extends from uvm_env
+	- may have multiple reusable envs and defines their defaults as required 
+	
+driver: extends from uvm_driver
+	- used to drive the signal on interface towards design
+	- convers tlm level transactions to signal/pin level transactions
+	- driver gets the data items from the sequencers
+	- relies on sequence_item's it receives to determine which type of pin level transaction to execute
+	
+sequencer: extends from uvm_sequence
+	- generates transactions as class objects and sends to driver
+	
+sequence: extends from uvm_sequence_item
+	- main stimulus 
+	- made from several data items which can be put together in different ways
+	- executed by sequencer
+	- main stimulus is written in the body.
+		- pre_body and post_body are callbacks
+		
+monitor: extends from uvm_monitor
+	- captures signal level activity from the interface and convert back to transaction level model
+	- tlm analysis port to broadcast data to other blocks
+	
+agent: extends from uvm_agent
+	- contains/instantiates sequencer, driver, and monitor
+	- collection of uvm_component's focused around a specific pin level interface
+	- helps multiple sequences to be driven to a single driver
+	
+	- active agent:
+		- instantiates all three: sequencer, driver, monitor
+		- enables driving the data into the DUT via the driver
+		
+	- passive agent:
+		- instantiates only the driver
+		- used for checking and coverage
+		- useful when no item is to be driven to the DUT
+
+scoreboard: extends from uvm_scoreboard
+	- verifies the functionality of the design
+	- receives tlm objects from interface of the DUT by tlm analysis port
+	
+---------------- WRITING TOP.SV for UVM ------------
+
+- it will be similar to SystemVerilog
+- `include "uvm_pkg.sv"
+- once you include, you import everything from the uvm_pkg library, by import uvm_pkg::*;
+- inside the module top
+	- instantiate DUT
+	- clk and reset
+	- interface
+		- usually a clock and reset in passed into the interface
+		
+		- create a virtual entry for the interface in the database (config_db) for any components in the testbench to access this interface
+	- include testlib
+	- add assertions if you want
+	
+
+
+	
+
+`include "uvm_pkg.sv"
+import uvm_pkg::*;
+
+module top:
+	
+	//instantiate DUT
+	dutx dutx_h();			//dut name dutx and handle name dutx_h
+	
+	//clock and reset generation
+	reg clk, rst;
+	
+	initial begin
+		rst=1;
+		repeat(5) @(posedge clk);
+		rst=0;
+	end
+	
+	//create interface
+	dutx_intf pif(rst, clk);
+	
+	initial begin
+		uvm_config_db#(virtual dutx_intf)::set(uvm_root::get(),"*", "vif", pif);
+	end
+	
+	
+	//include testlib
+	`include "test_lib.sv"
+	initial begin
+		run_test("some_random_test");
+	end
+	
+	//add assertions if needed
+
+endmodule
+	
+--------------------------------
+
+uvm phases are used to synchronize and properly schedule events. 
+	- also used to avoid race conditions
+
+In SystemVerilog, we have regions:
+
+	- preponed: sampling events
+		- evaluated once in each time slot
+		- The values of variables that are used in concurrent assertions are sampled
+	
+	- Preactive: specifically for PLI callback control point that allows for user code to rad and write values and create events before events in the active region are evaluated
+	
+	- active: module and continuous assign updates
+		- execute all module blocking assignments
+		- evaluate RHS of all non-blocking assignments and schedule updates in the NBA region
+		- execute all module continuous assignments
+		- evaluate inputs and update outputs of Verilog primitives
+		- execute $display and $finish statements
+	
+	- inactive: #0  statements
+		- holds the events to be evaluated after all the active events are processed.
+		- #0 blocking assignments are scheduled
+		
+	- Pre-NBA:
+		- specifically for a PLI callback control point that allows for user code to read and write values and create events before the events in the NBA region are evaluated
+		
+	- NBA: non-blocking assignment updates
+		- execute the updates to the Left-Hand-Side (LHS) variables that were scheduled in the Active region for all currently executing nonblocking assignments
+	
+	- Post-NBA:
+		- specifically for a PLI callback control point that allows for user code to read and write values and create events after the events in the NBA region are evaluated
+	
+	- Observed: assertion evaluation
+		-  evaluate the concurrent assertions using the values sampled in the Preponed region
+		
+	- Re-active: program block
+		- execute all program blocking assignments.
+		- execute the pass/fail code from concurrent assertions.
+		- evaluate the Right-Hand-Side (RHS) of all program nonblocking assignments and schedule
+		- execute all program continuous assignments
+		- execute the $exit and implicit $exit commands
+		
+	- Re-inactive: execute #0 delay statements in program block
+		- #0 blocking assignments in a program process are scheduled
+		
+	- Postponed: $monitor, $strove
+		- to execute the $strobe and $monitor commands that will show the final updated values for the current time slot
+		-  also used to collect functional coverage for items that use strobe sampling
+	
+--------------------- WRITING A TRANSACTION CLASS ---------------------
+
+- transaction class in UVM may have some input and output signals
+- UVM provides some inbuilt methods such as print, copy, compare, clone, pack, unpack
+
+- uvm_object as the base class
+- declare the fields
+- field registration with 
+	- `uvm_object_utils_begin
+	- `uvm_object_utils_end
+	- `uvm_field_int / `uvm_field_string
+
+- object creation
+	- create the "new" constructor
+
+
+
+
+class tx extends uvm_object;  
+
+
+endclass
+
+----------------------------------------------------
+
+Field macros:
+
+UVM_ALL_ON:
+UVM_DEFAULT:
+UVM_NOCOPY:
+UVM_NOCOMPARE:
+UVM_NOPRINT:
+UVM_NOPACK:
+UVM_REFERENCE:
+
+---------------------------------------------------------------
+
+COMMUNICATE BETWEEN TWO BLOCKS: 
+
+Two ways:
+1. Mailbox
+2. Producer/Consumer 
+	a. Producer doing a "put" into the consumer
+	b. Consumer doing a "get" or "pull" from the producer
+	
+------------ A --------------------
+
+//ON THE PRODUCER SIDE ------------>
+
+class producer extends uvm_component
+	uvm_blocking_put_port #(simple_trans) put_port; 
+	
+	//1 parameter
+	//uvm_blocking_put_port declares a blocking port
+	//parameterizing put_port with parameter type simple_trans
+	//port name: put_port
+	
+	
+	function new( string name, uvm_component parent);
+		put_port = new("put_port", this);
+		//...
+		//whenever you're extending the base class of uvm_component, you need two arguments:
+		//1st arg: instance name
+		//2nd arg: uvm_component
+				//when you specify the 2nd arg as NULL, it becomes the child module
+		
+	endfunction
+	
+	virtual task run();
+		simple_trans t;
+		for(int i = 0; i < N; i++) begin
+
+			//...
+			//Code for creating instances of transactions and do randomizations
+			//...
+			put_port.put(t);
+			
+		end
+	endtask
+	
+//ON THE CONSUMER SIDE ------------->
+
+class consumer extends uvm_component
+	uvm_blocking_put_imp #(simple_trans, consumer) put_export;
+	
+	//uvm blocking put port implementation
+	
+	
+	...
+	
+
+	task put(simple_trans t);
+		case(t.kind)
+			
+			//Rough implementation of whatever you want to do with that transaction
+			
+			READ: //do read
+			WRITE: //do write
+			
+			
+		endcase
+	endtask
+endclass
+
+
+---------------- B -----------------
+
+//ON THE CONSUMER SIDE ------------->
+
+class get_consumer extends uvm_component;
+	uvm_blocking_get_port #(simple_trans) get_port;
+	
+	function new( string_name, uvm_component parent);
+		get_port = new("get_port", this);
+		...
+		
+	endfunction
+	
+	virtual task run();
+		simple_trans t;
+		for(int i = 0; i < N; i++) begin
+
+			//...
+			//Code for creating instances of transactions and do randomizations
+			//...
+			put_port.get(t);
+			
+			// .get is a blocking task unless it gets some transactions from the producer
+			
+		end
+	endtask 
+
+
+//ON THE PRODUCER SIDE ------------->
+
+class get_producer extends uvm_component
+	uvm_blocking_get_imp #(simple_trans, get_producer) get_export;
+		...
+		
+	task get(output simple_trans t);
+		simple_trans tmp = new();
+		
+		//Assign values to the transaction or randomize the transaction
+		// ...
+		//
+		
+		t = tmp;
+	endtask
+
+endclass
+
+----------------------------------------------
+
+uvm_blocking_get_imp
+uvm_blocking_get_port
+uvm_blocking_put_imp
+uvm_blocking_put_port
+
+All come in the UVM base class
+
+-----------------------------------------------
+
+There is only one transaction we can send between the producer and the consumer.
+If multiple transactions need to be communicated, we have a concept of a TLM FIFO. 
+	//Transaction Level Modelling First In First Out
+	
+Another reason to have TLM FIFO is that when the consumer is doing some processing on the transactions, you don't want the producer to be halted from sending more transactions.
+
+We need to queue up multiple transactions with uvm_tlm_fifo. It will also have get/port functionality.
+
+
+---------------- IMPLEMENTATION OF CONNECTING PRODUCER TO CONSUMER ------------------------
+
+
+// IN THE ENV class
+
+class my_env extends uvm_env;
+	//...
+	
+	virtual function void connect();
+	
+		//PATTERN: component.port.connect(target.export);
+		
+		producer.blocking_put_port.connect(fifo.put_export);
+		get_consumer.get_port.connect(fifo.get_export);
+		
+		//if you don't use a tlm fifo, you can simply replace "fifo" with "consumer"
+		
+		//...
+		
+	endfunction
+endclass
+
+
+-------------------------------------- ANALYSIS PORTS ---------------
+
+FOR one to many connections, UVM has a concept of analysis ports: uvm_analysis_port
+used by monitors, coverage collectors, and scoreboards.
+
+The analysis port contains a list of analysis_exports that are connected to it.
+When the component calls analysis_port.write(), the analysis_port cycles through the list and calls the write() methid of each connected export.
+
+put is not a non-blocking task
+write is a non-blocking task
+
+
+--------------- EXAMPLE OF ANALYSIS PORT -----------------
+
+class my_env extends uvm_env;
+	get_ap_component g;		//analysis port component: this analysis_port will do an analysis_port.write()
+	sub1 s1;				//subscribers
+	sub2 s2;
+	
+	...
+	
+	function void connect();
+		g.ap.connect(s1.analysis_export);
+		g.ap.connect(s2.analysis_export);
+		...
+	endfunction
+	
+endclass
+
+// analysis fifo is also possible
+
+	
+	
+------------------------------------------------------------- BASIC TLM IMPLEMENTATION IN A TESTBENCH
+
+
+/* 
+About: producer_consumer
+
+This test is the basic simple to illustrates how to create a producer and consumer which are completely independent and connecting them using a uvm_tlm_fifo channel
+
+
+Walk through the test:
+
+two thrads *producer* and *consumer* will use uvm_blocking_put port and uvm_blocking_get port, to transfer an integer from the producer to the consumer through fifo exports at the connection function of an environment class
+
+
+*/
+
+`include "uvm_macros.svh"
+
+//----------------------------------------------------------------------
+// module top
+//----------------------------------------------------------------------
+module test;
+
+  import uvm_pkg::*;
+  
+  //----------------------------------------------------------------------
+  // class producer
+  //----------------------------------------------------------------------
+  class producer extends uvm_component;
+
+    uvm_blocking_put_port#(int) put_port;
+    
+    function new(string name, uvm_component p = null);
+      super.new(name,p);
+      put_port = new("put_port", this);
+      
+    endfunction
+    
+    task run_phase(uvm_phase phase);
+      
+      int randval;
+      
+      for(int i = 0; i < 10; i++)
+        begin
+          randval = $random % 100;
+	  #10;
+          `uvm_info("producer", $sformatf("sending   %4d", randval), UVM_MEDIUM)
+          put_port.put(randval);
+        end
+    endtask
+    
+  endclass : producer
+  
+  //----------------------------------------------------------------------
+  // class consumer
+  //----------------------------------------------------------------------
+  class consumer extends uvm_component;
+
+    uvm_blocking_get_port#(int) get_port;
+    
+    function new(string name, uvm_component p = null);
+      super.new(name,p);
+      get_port = new("get_port", this);
+    endfunction
+    
+    task run_phase(uvm_phase phase);
+      
+      int val;
+      
+      forever
+        begin
+          get_port.get(val);
+          `uvm_info("consumer", $sformatf("receiving %4d", val), UVM_MEDIUM)
+        end
+      
+    endtask
+    
+  endclass : consumer
+  
+  //----------------------------------------------------------------------
+  // class env
+  //----------------------------------------------------------------------
+  class env extends uvm_env;
+    producer p;
+    consumer c;
+    uvm_tlm_fifo #(int) f;
+    
+    function new(string name = "env");
+      super.new(name);
+      p = new("producer", this);
+      c = new("consumer", this);
+      f = new("fifo", this);
+      $display("fifo put_export: %s", f.m_name);
+    endfunction
+    
+    function void connect_phase(uvm_phase phase);
+      p.put_port.connect(f.put_export);
+      c.get_port.connect(f.get_export);
+    endfunction
+    
+    task run_phase(uvm_phase phase);
+      phase.raise_objection(this);
+      #1000;
+      phase.drop_objection(this);
+    endtask
+    
+  endclass
+  
+  // Main body of module top:
+  env e;
+  
+  initial begin
+    e = new();
+    run_test();
+    //$finish;
+  end
+
+endmodule // test
+
+-------------------------------------------------------------------------
+
+TESTBENCH has two main collective component types:
+	- env
+	- agent 
+	
+	- ENV encapsulates all testbench components
+	- AGENT is a group of test bench components (monitor, driver, and sequencer) all operate on a specific DUT interface
+	
+	
+The static components include 
+
+uvm_object <- uvm_report_object <- uvm_component
+
+uvm_report_object adds a reporting infrastructure
+uvm_component adds a static hierarchy, phase, and configuration support
+
+
+The dynamic UVM sequence is inherited like this
+
+uvm_object <- uvm_transaction <- uvm_sequence_item <- uvm_sequence
+
+uvm_sequence_item adds sequencer hooks
+uvm_sequence adds the body method for the sequence
+
+In the higher layer testbench, we will mostly use the uvm_component and uvm_sequence, and once in a while, we might use uvm_sequence_item.
+
+UVM base class also has its generic uvm_driver, uvm_sequencer, and uvm_subscriber.
+
+uvm_driver: adds sequence communication subcomponents used with the uvm_sequencer
+uvm_sequencer: adds sequence communication subcomponents used with the uvm_driver
+uvm_subscriber: A wrapper around a uvm_analysis_export
+
+
+------------- HOW TO IMPLEMENT A DRIVER -----------------
+
+- extends from uvm_driver
+- utilities for printing, copying, comparing, and so on
+- declare a virtual interface in the driver to connect the driver to the DUT
+- obtain the next data item from the sequencer and execute it (with the run() method)
+- implement the actual design interface protocol
+
+
+----------------------- WRITING A DRIVER CLASS --------------
+
+class simple_driver extends uvm_driver #(simple_item);
+  simple_item s_item;		//derived from uvm_sequence_item
+  virtual dut_if vif;		//describes the interface level signals of the DUT
+  
+   // UVM automation macros for general components
+  `uvm_component_utils(simple_driver)
+				
+				// In simple terms, you need to register all your testbench components within the UVM factory. That is done by uvm_component_utils(). In this case, the simple_driver class is registered with the uvm factory.
+		
+  
+   // Constructor
+   function new (string name = "simple_driver", uvm_component parent);
+     super.new(name, parent);
+   endfunction : new
+
+   function void build_phase(uvm_phase phase);
+     string inst_name;
+     super.build_phase(phase);
+      if(!uvm_config_db#(virtual dut_if)::get(this,"","vif",vif)) begin
+        `uvm_fatal("NOVIF", {"virtual interface must be set for: ", get_full_name(),".vif"});
+      end 
+   endfunction : build_phase 
+   
+   task run_phase(uvm_phase phase);
+   
+   //This is where the actual work is being done by the driver
+   
+     forever begin
+       // Get the next data item from sequencer (may block).
+       seq_item_port.get_next_item(s_item);			
+					//seq_item_port defined in the base class of uvm_driver
+					//get_next_item is a blocking call
+	   
+       // Execute the item. 
+       drive_item(s_item);
+					//drive_item is very specific to your driver
+					//you will have to program it accordingly 
+					//more details below
+	   
+       seq_item_port.item_done(); 	// Consume the request.
+									// This will signal to the sequencer that the item is done.
+									// item_done is a non-blocking methods which confirms the completion of the driver-sequence communication i.e. the request is completed
+									
+     end
+   endtask : run
+
+   task drive_item (input simple_item item);
+      // Add your logic here.
+   endtask : drive_item
+
+					//For example, if your DUT interface uses an APB interface, PCI interface, or any kind of memory interface, then you need to program your logic on how exactly, those signals should be driven as signal and pin level information to be sent to the DUT
+  
+endclass : simple_driver
+
+
+----------------------- WRITING A SEQUENCER CLASS --------------
+
+- uvm base class uvm_sequencer contains most of the base functionality to allow a sequence to be communicated to the driver
+
+- pass the parameterized type i.e. the sequence item that will be used to be sent to the driver. In our case, it's the simple_item which was previously extended from uvm_sequence_item. 
+
+- Also, you can optionally have a simple response for whatever response needs to be sent to the DUT back to the sequencer. E.g. in cell checking scenarios where you would need an acknowledgement before sending a new signal OR write based on whatever reads we have OR sending a response based on the original read data 
+
+
+class simple_sequencer extends uvm_sequencer #(simple_item, simple_rsp);
+ 
+ `uvm_component_utils(simple_sequencer);    //register to the UVM factory
+
+  function new (input string name, uvm_component parent=null)'
+    super.new(name, parent);
+  endfunction
+
+endclass : simple_sequencer
+
+
+------------------- CONNECTING THE SEQUENCER TO THE DRIVER --------------------
+
+- Sequencer and driver connect using TLM ports
+- Driver pulls data from sequence using get_next_item() (blocking call)
+- Driver has a sequence_item_port that is connected to a sequence_item_export in the sequencer
+
+//Connect method
+function void connect_phase(uvm_phase phase);			// you'll have a connect phase in your agent
+	if(m_cfg.active == UVM_ACTIVE) begin
+		m_driver.seq_item_port.connect(m_sequencer.seq_item_export);		//if you have a response
+		m_driver.rsp_port.connect(m_sequencer.rsp_export);
+		m_driver.vif = cfg.vif;
+	end
+	
+...
+
+
+------------------------------ SENDING RESPONSES BACK --------------------------
+
+- Two ways of responding back
+	- Modify certain fields in the same transactions sent from the sequencer to the driver
+	- use separate response port to send responses
+	
+- For using the same port: 
+	- seq_item_port.item_done(rsp);
+	- seq_item_port.put_response(rsp); 
+	
+- For using response port
+	- rsp_port.write(rsp);
+
+
+--------------------------- WRITING A UVM MONITOR ------------------------------
+
+- monitor extracts signal level information  from whatever the signal level protocol is and translates to a higher level object or transaction
+- it can pass the information to other test bench components using TLM connections
+- passes information to coverage collectors and scoreboards using analysis ports and exports
+
+
+- extends from uvm_monitor
+- implement the logic to monitor signal level information
+	- you would need a virtual interface for that
+- 
+
+
+
+class master_monitor extends uvm_monitor;
+  virtual bus_if xmi; // SystemVerilog virtual interface
+  bit checks_enable = 1; // Control checking in monitor and interface.
+  
+  bit coverage_enable = 1; // Control coverage in monitor and interface.
+  
+  
+  //Most importantly, you need an analysis port
+  uvm_analysis_port #(simple_item) item_collected_port;		
+  
+  event cov_transaction; // Events needed to trigger covergroups
+
+  protected simple_item trans_collected;
+  
+  
+  //initialization for the monitor
+  uvm_component_utils_begin(master_monitor)
+    `uvm_field_int(checks_enable, UVM_ALL_ON)
+    `uvm_field_int(coverage_enable, UVM_ALL_ON)
+  uvm_component_utils_end
+  
+  
+  //covergroups in the monitor class
+  covergroup cov_trans @cov_transaction;
+    option.per_instance = 1;
+    // Coverage bins definition
+  endgroup : cov_trans
+
+
+  //Constructor for the monitor
+  function new (string name, uvm_component parent);
+     super.new(name, parent);
+     cov_trans = new();
+     cov_trans.set_inst_name({get_full_name(), ".cov_trans"});
+     trans_collected = new();
+     item_collected_port = new("item_collected_port", this);	//creating an instance of the analysis port
+  endfunction : new
+
+
+
+  virtual task run_phase(uvm_phase phase);
+     fork
+       collect_transactions(); // Spawn collector task.
+    join
+  endtask : run
+
+  virtual protected task collect_transactions();
+    forever begin  @(posedge xmi.sig_clock);
+      // Collect the data from the bus into trans_collected.
+      if (checks_enable)
+         perform_transfer_checks();
+      if (coverage_enable)
+         perform_transfer_coverage();
+      item_collected_port.write(trans_collected);		//writing into the analysis port
+    end
+  endtask : collect_transactions
+
+  virtual protected function void perform_transfer_coverage();
+     -> cov_transaction;
+  endfunction : perform_transfer_coverage
+
+  virtual protected function void perform_transfer_checks();
+      // Perform data checks on trans_collected.
+  endfunction : perform_transfer_checks
+
+endclass : master_monitor
+
+
+
+-------------------------- AGENT TO CONNECT THE BLOCKS TOGETHER -----------------------------------
+
+- Multiple agents can be used for multiple DUT interfaces which has different protocol
+	- the same DUT can have multiple interfaces
+
+- Agents can be used for similar interfaces
+	- Components within an agent can be configured active/passive
+		- Active:	contains active components like driver, sequencer which are active during simulation
+			- drive stimulus to the DUT
+		- Passive: 	contains only passive components like monitors
+			- don't drive stimulus to the DUT
+
+- Typically you have a config object for every interface that has to be included with the agent component
+
+
+- In a real life scenario when you have an RTL that does the driving, you can instantiate the agent as a passive component
+	- e.g. a gpio_env can have a gpio RTL that will drive interface level information on the interface to the DUT.
+		- In such a case, you wouldn't need a monitor. But in such a case, you would need to configure the monitor as passive
+
+- You can have a higher level test where you have active and passive both components.
+
+
+
+
+
+class simple_agent extends uvm_agent;
+
+  uvm_active_passive_enum is_active;		//to make the agent active or passive
+  
+  // Constructor and UVM automation macros. Instantiate sequencer, driver, monitor
+  simple_sequencer sequencer;				//you can have a parameterized sequencer like 
+											//uvm_sequencer #(simple_item) sequencer;
+  simple_driver driver;
+  simple_monitor monitor;
+ 
+  // Use build() phase to create agents's subcomponents.
+  virtual function void build_phase(uvm_phase phase);
+    super.build_phase(phase)				// This will call the base class of "build"
+    monitor = simple_monitor::type_id::create("monitor",this);  //create the monitor component
+    
+	if (is_active == UVM_ACTIVE) begin
+      // Build the sequencer and driver.
+      sequencer = simple_sequencer::type_id::create("sequencer",this);
+      driver = simple_driver::type_id::create("driver",this);
+    end
+	
+  endfunction : build_phase
+
+  //Use connect phase to connect components together
+  virtual function void connect_phase(uvm_phase phase);
+    if(is_active == UVM_ACTIVE) begin
+      driver.seq_item_port.connect(sequencer.seq_item_export);
+    end
+ endfunction : connect_phase
+
+endclass : simple_agent
+
+
+-------------------------------------- ENV, TEST ----------------------------------------------
+
+- Environment is the top level container class
+- All agents are instantiated and configured in the env class
+- Most verification reuse happens at env level
+	- If you have a block level environment which instantiates the agents that are connected for that specific block of design, then the block level can instantiate multiple of such environments
+		- Based on those environments, it configure corresponding agents
+		
+
+
+
+- Test is the top level class that instantiates ENV, configures the testbench, and instantiates construction
+- Individual tests derive from uvm_test
+	- UVM base class provides uvm_test class
+	- Each testcase instantiates uvm_env and configures them
+		- configure them as active or passive
+	
+- Testbench is activated with a call to run_test(); which starts the build phases
+
+
+
+			
+-------------------------------------- BUILDING AND CONNECTING TESTBENCH COMPONENTS ---------------
+
+
+- Before generating any stimulus in UVM, all verification components needs to be built and all components need to be well connected
+
+- Testbench construction is top down
+	- Test will be the top level component
+		- Test will also instantiate the env
+		
+- UVM testbench has two components: static and dynamic
+	- Static: it will be the testbench top module
+		
+	
+		module top_tb;
+			//DUT, interfaces, etc ...
+			
+			initial begin
+				//virtual interface handling code
+				...
+				run_test();
+			end
+			
+			//connecting interfaces to the classes code
+			
+		
+		endmodule: top_tb
+		
+
+
+
+	- Dynamic:
+		- this is where the class based testbench components reside
+		- env
+		
+		
+- run_test(); method
+	- part of the uvm_test class
+	- will trigger the test class to be built
+		- calling run_test() causes the selected test to be constructed
+			- build process starts from the test and works top down 
+				: test --> env --> agent(s) --> agent components ... 
+	- After all the UVM phases are complete, UVM calls $finish after which the control is returned to the testbench module initial block
+				
+	
+//-------------------------------------------------------------------------
+//This is a  pseudo code example for how  build flow works form a test class down to env and to agents and sub components
+//This is a simplest example with no config objects to start with
+//
+//Once you get this concept and understand config object - it might be also good to refer to the 
+//similar example with  config objects as well (simple_build_config.svh)
+//------------------------------------------------------------------------------
+
+class spi_test_base extends uvm_test;			//Top level class
+  // UVM Factory Registration Macro
+  `uvm_component_utils(spi_test_base)
+  //------------------------------------------
+  // Data Members
+  //------------------------------------------
+  //------------------------------------------
+  // Component Members
+  //------------------------------------------
+  
+  // The environment class
+  spi_env m_env;
+ 
+  // Build the env, 
+  function void build_phase( uvm_phase phase );
+    // Now we are ready to build the spi_env:
+    m_env = spi_env::type_id::create("m_env", this);	//build the environment class using the UVM factory
+  endfunction: build_phase
+
+endclass: spi_test_base
+
+
+
+//-------------------
+
+
+//-------------------------------------------------------------------------
+//This is a  pseudo code example for how  build flow works form a test class down to env and to agents and sub components
+//This code also demonstrates how to use configuration objects to configure parameters for each component
+//and how to build first level of hierarchy.
+//
+// Before referencing this - it might be also good to refer to the simple case with no configs (simple_build_test.svh)
+//------------------------------------------------------------------------------
+
+class spi_test_base extends uvm_test;
+  // UVM Factory Registration Macro
+  `uvm_component_utils(spi_test_base)
+  //------------------------------------------
+  // Data Members
+  //------------------------------------------
+  //------------------------------------------
+  // Component Members
+  //------------------------------------------
+  
+  // The environment class
+  spi_env m_env;
+  // Configuration objects
+  spi_env_config m_env_cfg;
+  apb_agent_config m_apb_cfg;
+  spi_agent_config m_spi_cfg;
+
+  // Build the env, create the env configuration
+  // including any sub configurations and assigning virtual interfaces
+  function void build_phase( uvm_phase phase );
+
+    // Create env configuration object
+    m_env_cfg = spi_env_config::type_id::create("m_env_cfg");
+
+    // Call function to configure the env
+    configure_env(m_env_cfg);
+
+    // Create apb agent configuration object
+    m_apb_cfg = apb_agent_config::type_id::create("m_apb_cfg");
+
+    // Call function to configure the apb_agent
+    configure_apb_agent(m_apb_cfg);
+
+    // Adding the apb virtual interface:
+    if( !uvm_config_db #( virtual apb3_if )::get(this, "" , "APB_vif",m_apb_cfg.APB) )
+         `uvm_error(...)
+
+    // Assign the apb_angent config handle inside the env_config:
+    m_env_cfg.m_apb_agent_cfg = m_apb_cfg;
+
+    // Repeated for the spi configuration object
+    m_spi_cfg = spi_agent_config::type_id::create("m_spi_cfg");
+    configure_spi_agent(m_spi_cfg);
+    if( !uvm_config_db #( virtual apb3_if )::get(this, "" , "SPIvif",m_spi_cfg.SPI) )
+       `uvm_error(...)
+    m_env_cfg.m_spi_agent_cfg = m_spi_cfg;
+
+    // Now env config is complete set it into config space:
+    uvm_config_db #( spi_env_config )::set( this , "*m_spi_agent*", "spi_env_config", m_env_cfg) );
+
+    // Now we are ready to build the spi_env:
+    m_env = spi_env::type_id::create("m_env", this);
+  
+  endfunction: build_phase
+
+  //configure env config - can extend in derived tests
+  //setting up certain parameters of the configuration (cfg) class
+  function void configure_env(spi_env_config  cfg);
+    cfg.has_functional_coverage = 1;
+    cfg.has_reg_scoreboard = 0;
+    cfg.has_spi_scoreboard = 1;
+  endfunction: configure_env
+
+
+  // Convenience function to configure the apb agent
+  // This can also be extended by derived classes
+  function void configure_apb_agent(apb_agent_config cfg);
+    cfg.active = UVM_ACTIVE;
+    cfg.has_functional_coverage = 0;
+    cfg.has_scoreboard = 0;
+  endfunction: configure_apb_agent
+  
+endclass: spi_test_base
+
+//---------------------------------------------------
+// Env Config  Class
+//---------------------------------------------------
+class spi_env_config extends uvm_object;
+  // UVM Factory Registration Macro
+  `uvm_object_utils(spi_env_config)
+  //------------------------------------------
+  // Data Members
+  //------------------------------------------
+  // Whether env analysis components are used:
+  bit has_functional_coverage = 1;
+  bit has_reg_scoreboard = 0;
+  bit has_spi_scoreboard = 1;
+   
+  //Configurations for the sub_components
+  //APB Agent Config
+  apb_config m_apb_agent_cfg;
+  // SPI Agent Config
+  spi_agent_config m_spi_agent_cfg;
+
+  function new(string name = "spi_env_config");
+    super.new(name);
+  endfunction
+ 
+endclass:  spi_env_config 
+
+endclass: spi_env_config
+
+
+
+//In Verilog testbench, there is hardly any real difference between design block and test bench block
+//In Class based SystemVerilog/UVM testbench, testbench components are dynamic
+
+
+------------------------ SIMULATION PHASES ----------------------------------------
+
+- Broadly divided as:
+	- Build phases: initial set of phases where the testbench components are built and connected
+		- build
+		- connect
+		- end_of_elaboration
+	- Run phases: advances the simulation
+		- start_of_simulation
+			- occurs before the time consuming part of the testbench begins
+		- run
+			- pre_reset
+				- To take care of any activity that should occur before reset e.g. waiting for a power signal to go high
+			- reset
+			- post_reset
+			- pre_configure
+				- intended for anything that is required to prepare for the DUT's configuration after reset
+			- configure
+				- Used to program the DUT and any memories in the teste bench so that it's ready for the start of the test
+			- post_configure
+				- Used to wait for the effects of the configuration to propagate through the DUT
+			- pre_main
+				- Used to ensure that all the required components are ready to start generating stimulus
+			- main
+				- This is where you will start the stimulus generators and run all the sequences, drivers, etc.
+				- It completes when either all stimulus is exhausted or a timeout occurs.
+		
+			- post_main
+			- pre_shutdown
+			- shutdown
+			- post_shutdown
+	- Clean up phases: end of test phases and collecting information of the final DUT state
+		- extract
+		- check
+		- report
+		- final 
+		
+- Mostly, we will use build, connect, main, check, report
+ 		
+
+------------------------------- SEQUENCES ------------
+
+- Pre-UVM and pre-SystemVerilog:
+	- Stimulus was generated by layers of subroutine calls
+		- Time consuming methods like tasks
+			- Direct DUT connections were required
+		- Non-time consuming methods like functions
+			- Algorithms
+		
+	- Disadvantages:
+		- Constrainted random verification was hard to implement
+		- Tests would become hardcoded for specific features
+		- Tests needed recompilation for each test
+		- Reuse for different environments was not possible
+
+- SystemVerilog classes fixed all of these issues
+	- Stimulus is separated from the testbench structure
+		- better reusability
+	- Sequences provide a highly modular and flexible means for building complex stimulus generators
+	
+
+- Sequence:
+	- A generation of transactions to stimulate and exercise the design
+	- Uses object oriented programming
+	- Uses SystemVerilog randomization constraints
+	- Uses TLM ports to send the transactions to driver through sequencer
+		- As long as the driver and sequencer understand TLM, you can plug and play any sequence
+	- Contains a task body() that gets executed when sequence is used
+		- Main intelligent information
+	- Is a transient object with limited life time during simulation
+		- Once sequence is driven, the sequence objects are removed from memory
+		
+- UVM sequences are meaningful streams of transactions
+	- A sequencer controls the generation of random stimulus
+	- A simple sequence is a random transaction generator
+	- A more complex sequence can contain timing, additional constraints, parameters, etc.
+	
+
+- A sequence generates one or more sequence_item's 
+
+sequence_item:
+	- Foundation objects on which sequences are built
+	- Sequence item content is determined by what pin level information should be stimulated
+	- sequence_item contents are generated using SV constraints for randomization
+	- Should also implement common transaction operations
+		- copy
+		- compare
+		- convert2string
+
+- Sequence execution flow:
+	- Call uvm_sequence::start() to start execution
+		- internally call the body() method
+		- the body should implement what all sequence_item's to be sent to driver or whether to spawn other sequences etc.
+		
+	- Sequences are normally started in the run() method of the test class
+	- Sequences can be started in a chained manner or parallel or any randomized order
+		- Chained:
+			- One sequence followed by another sequence followed by another sequence
+		- Parallel or randomly based on what needs to go into the driver
+	- Sequences can be generated re-actively based on responses from driver
+
+		
+- Variations of sequence generation:
+	- Stimulus on more than one driver
+		- In most cases, the testbench would need to generate transactions on multiple interfaces in a controlled manner
+			- Use a virtual sequence to control this
+				- A virual sequence is one that can start sub-sequences on multiple sequencers
+	- Multiple stimulus (sequence) on a single driver
+		- You can have methods like grab or lock if a sequence needs exclusive access to the driver
+	- Layered sequences
+		- Higher level sequences generating lower level sequences which are specific to an environment
+	- Waiting for a hardware event
+	- Interrupt driven sequence generation
+
+	
+	
+--------------------------- SEQUENCE ITEMS AND METHODS -------------------------------
+
+
+- Data property members in sequences
+	- What you really want to drive defines the data property members
+- At high level, these are defined based on the driver interface to the DUT
+	- Data members typically represent the following types of information:
+		- Control: what type of transfer, what size 
+		- Payload: The main data content of the transfer
+		- Configuration: Mode of operation, error behavior, etc.
+		- Analysis: convenience fields which aid analysis - time stamps, rolling checksums, CRC, etc.
+		
+- Randomization is done inside sequences
+	- Data members should be declared as rand and constraints should be implemented for legal and required values
+	- Request parameters are set as rand
+		- Different stimulus would be needed for the DUT
+	- Response parameters are set as non-rand
+	
+- uvm_object <- uvm_sequence_item 
+	
+	
+----------------- EXAMPLE OF A SEQUENCE ITEM ---------------
+	
+
+class bus_seq_item extends uvm_sequence_item
+	
+	//Request data properties are rand
+	rand logic[31:0] addr;
+	rand logic[31:0] write_data;
+	rand bit read_not_write; 
+	rand int delay;		//Usually used if you want sequence items generated with random delays
+	
+	//Response data properties are NOT rand
+	bit error;
+	logic[31:0] read_data;
+	
+	`uvm_object_utils(bus_seq_item);			
+	//register the sequence item in the UVM factory
+		// This would mean that bus_seq_item can be generated on runtime
+	
+	
+	//Constructor
+	function new (string name = "bus_seq_item");
+		super.new(name);
+	endfunction
+	
+	//Constraints
+	constraint at_least_1 	{ delay inside {[1:20]}; } 		//delay between bus cycles is reasonable
+	constraint align_32		{ addr[1:0] == 0; )				//32 bit aligned transfers
+	
+	// do_copy method:	Typically used to copy one sequence_item to another sequence_item
+   function void do_copy(uvm_object rhs);
+     bus_item rhs_;
+     if(!$cast(rhs_, rhs)) begin			
+        uvm_report_error("do_copy:", "Cast failed");
+        return;
+     end
+	 //Advisable because whatever item you're trying to copy should be of the same type 
+	 
+     super.do_copy(rhs); // Chain the copy with parent classes
+     delay = rhs_.delay;
+     addr = rhs_.addr;
+     op_code = rhs_.op_code;
+     slave_name = rhs_.slave_name;
+     data = rhs_.data;
+     response = rhs_.response;
+   endfunction: do_copy
+
+   // do_compare implementation:
+   function bit do_compare(uvm_object rhs, uvm_comparer comparer); 
+     bus_item rhs_;
+     // If the cast fails, comparison has also failed
+     // A check for null is not needed because that is done in the compare()
+     // function which calls do_compare()
+     if(!$cast(rhs_, rhs)) begin
+      return 0;
+     end 
+     return((super.do_compare(rhs, comparer) &&
+            (delay == rhs_.delay) &&
+            (addr == rhs.addr) &&
+            (op_code == rhs_.op_code) &&
+            (slave_name == rhs_.slave_name) &&
+            (data == rhs_.data) &&
+            (response == rhs_.response));
+  endfunction: do_compare
+
+
+  // Implementation example:
+  function string convert2string(); 		//To convert the whole sequence_item as a string
+    string s;
+    s = super.convert2string();
+    // Note the use of \t (tab) and \n (newline) to format the data in columns
+    // The enumerated op_code types .name() method returns a string corresponding to its value
+    $sformat(s, "%s\n delay \t%0d\n addr \t%0h\n op_code \t%s\n slave_name \t%s\n",
+                s, delay, addr, op_code.name(), slave_name);
+    // For an array we need to iterate through the values:
+    foreach(data[i]) begin
+      $sformat(s, "%s data[%0d] \t%0h\n", s, i, data[i]);
+    end
+    $sformat(s, "%s response \t%0b\n", s, response);
+    return s;
+  endfunction: convert2string
+
+	
+endclass: bus_seq_item
+	
+	
+--------------------------------------------------------------
+
+UVM Sequence
+
+- A sequence is derived from uvm_sequence and parameterized with sequence_item type
+
+
+- Example
+class bus_random_sequence extends uvm_sequence #(bus_sequence_item)
+...
+endclass
+
+- bus_sequence_item is the sequence item type that the sequence will be generating and passing it to the sequencer and driver
+
+
+- Two important properties
+	- body() method
+		- The content determines what the sequencer does
+	- m_sequencer handle
+		- The m_sequencer handle contains the reference to the sequencer on which the sequencer is running
+			- Every sequence will run on a sequencer to which the sequence will send the sequence_item's. m_sequencer will be the handle to that sequence.
+		- Can be used to access configuration information and other resources in the UVM component hierarchy
+			- If the sequence wants any information from the component hierarchy, it has to be done by the m_sequencer handle
+
+--------------------------------- STEPS TO RUN A SEQUENCE --------------------
+
+1. Create the sequence
+	- Declare a sequence and create sequence using factory
+	- Using factory allows sequences to be overriden from tests
+
+
+
+	
+my_sequence m_seq;									//Declaration
+m_seq = my_sequence::type_id::create("m_seq");  	//Factory method to creates an object of the sequence
+
+
+
+2. Configure the sequence
+	- Setting up start values - e.g. a start address or data value
+	- Setting up a generation loop variable - e.g. number iterations
+	- Setting up pointers to testbench resources - e.g. a register map
+
+
+
+
+	
+m_seq.no_iterations = 10;		//Direct assignment of values
+
+//Randomization - You can have default constraints or inline constraints as mentioned here
+if (!m_seq.randomize() with {no_iterations inside {[5:20]};}) begin
+	uvm_error("marker", "randomization failure for m_seq")
+end
+
+
+//Assigning a testbench resource
+m_seq.reg_map = env.reg_map;		//WRONG! YOU WOULD NEED m_sequencer handle TO GET THE POINTER TO THE ENV BEFORE YOU GET TO reg_map
+
+
+
+
+
+3. Start the sequence
+
+- A sequence is started using start() method which is blocking and returns at the end of executing body()
+	- start() is defined in the base uvm_sequence
+- Arguments - sequencer type and 3 optional ones
+	- Mandatory argument:
+		uvm_sequencer_base		sequence
+	- Optional argument:
+		uvm_sequence_base		parent_sequencer = null,
+		integer 				this_priority = 100,	
+		bit						call_pre_post = 1	);	
+		
+
+
+
+
+virtual task start
+	(	uvm_sequencer_base		sequence, 					//pointer to sequencer
+		uvm_sequence_base		parent_sequencer = null, 	//Relevant if called within a sequence
+		integer 				this_priority = 100,		//Priority on the sequencer
+		bit						call_pre_post = 1	);		//pre_body and post_body methods called
+		
+		
+...
+
+
+//For instance - called from a uvm_component - usually the test:
+apb_write_seq.start(env.m_apb_agent.m_sequencer);			//This is how you hierarchically refer to the sequence on the m_sequencer
+
+//or called from within a sequence
+apb_compare_seq.start(m_sequencer, this);
+
+
+
+4. Send sequence items to the driver
+
+- Implement body() with following steps:
+	i. 		Create sequence item using factory
+	ii. 	Call start_item()
+				- Blocks until the sequence grants access to the sequence
+	iii. 	Set/randomize
+				- Set up sequence item properties or randomize
+				- Advisable to do after start_item because you get access to the sequence
+	iv. 	Call finish_item()
+				- Blocks until driver completes its transfer
+	v. 		Call get_response()
+				- Optional
+				- Blocks until a response is received from the driver
+
+
+
+
+
+- Example code of body()
+
+my_sequence_item item;
+
+	task body;
+		//Step 1 - Create a sequence
+		item = my_sequence_item::type_id::create("item");
+		
+		//Step 2 - Configure the sequence
+		start_item(item);			//Trigger the arbitration to the sequencer
+									//will block until the sequencer grants arbitration		
+		
+		//Step 3 - Start the sequence
+		if(!item.randomize() with {address inside {[0:32'h4FFF_FFFF]};} begin
+			uvm_error("body", "randomization failure for item")
+		end
+		
+		//Step 4 - Send sequence items to the driver
+		finish_item(item);
+	
+	endtask: body
+	
+	...
+	
+-------------------------- SEQUENCER-DRIVER API -----------------
+
+
+- Sequences communicate to target driver through a sequencer
+- Connections are made using TLM communication
+- Typically, the sequencer and driver are connected in the connect phase of the agentusing the connect_phase methods
+	- The agent will instantiate the driver and the sequencer
+	
+
+
+
+
+function void connect_phase(uvm_phase phase); 
+	if(m_cfg.active == UVM_ACTIVE) begin
+		
+		//Always connect drivers ports to sequencers export
+		m_driver.seq_item_port.connect(m_sequencer.seq_item_export);
+		
+		//Optional response analysis port connection
+		m_driver.rsp_port.connect(m_sequencer.rsp_export);
+		
+		//connecting the 
+		m_driver.vif=cfg.vif;
+	end
+endfunction: connect_phase
+
+
+
+Once the TLM is connected the sequence can communicate with the driver
+Functions needed to correctly communicate between driver and sequencer
+
+- get_next_item()
+	- blocking method that waits until a sequence item (REQ) is available in sequencer FIFO and returns the pointer of REQ
+
+- try_next_item()
+	- Non-blocking variant of get_next_item
+	- Returns NULL if no item is available
+	
+- item_done()
+	- Non-blocking method that completes handshake
+	- Optional argument to place a response sequence item (RESP) into sequencers response FIFO
+	
+- peek()
+	- Similar to get_next_item and blocks until a REQ is available
+	- However, peek() does NOT remove the item from the sequencer FIFO. 
+		- A subsequent item_done() will remove the item from the sequencer FIFO
+		
+- get()
+	- Similar to get_next_item and blocks until a REQ is available
+	- However, get() completes a handshake immediately, and no need of calling item_done()
+	
+- put()
+	- Non-blocking method used to place a response in sequencer's response FIFO
+	- unlike item_done(RESP), put() can be called anytime independent of handshake
+	
+
+Recommended and most common Driver-Sequencer API Usages (timing diagram)
+SEE THE VIDEO
+
+
+ 
+////////// RUN METHOD WITHIN THE DRIVER  using get() and put()
+
+task run_phase(uvm_phase phase);
+	REQ req_item;		//REQ is parameterized type for requests
+	RSP rsp_item;		//RSP is parameterized type for responses
+	
+	forever begin
+		seq_item_port.get(req_item);			//block until you get the req_item
+												//finish item in sequence is unblocked
+		
+		@(posedge vif.clk);
+		vif.addr = req_item.addr;
+		
+		//
+		// etc
+		//
+		// End of bus transfer					//Driver can continue with driving
+		
+		
+		//Create a response transaction by cloning req_item
+		//Send a response back using the response's item port
+		$cast(rsp_item, req_item.clone());
+		
+		//if the response item is not cloned, you can run into issues as the same pointer might be overwritten with new responses (if the previous ones are not yet consumed by the sequence.
+		//Best to use clone for safety
+		
+		//Set the rsp_item sequence to match req_item
+		rsp_item.set_id_info(req_item);			//set_id_info will copy all the sequence_item_id from the req_item and set the same transaction id in the rsp_item
+		
+		//Copy the bus data to the response fields
+		//Optionally, based on whether the req_item was a read or a write, you can set the read_data of the rsp_item to whatever it was on the virtual interface
+		if(req_item.read_or_write == READ) begin
+			rsp_item.read_data = vif.data;
+		end
+		
+		//You can also sample error signals
+		rsp_item.resp = vif.error;
+		
+		
+		//Once you created and collected all the rsp_item attributes, you can call the seq_item_port.put() to complete the handshake 
+		//Handshake back to the sequence via its get_response() call
+		seq_item_port.put(rsp_item);
+	end
+endtask
+
+
+//If the driver were to implement this kind of a response port, the sequence needs to know not to expect a separate response on this port, so the sequence needs to be coded that way.
+
+
+//Example of the body method for the above example
+
+task body();
+	REQ req_item;
+	RSP rsp_item;
+	
+	//The body will now send 10 req_item and gather their responses
+	
+	repeat(10) begin
+		req_item = bus_seq_item::type_id::create("req_item");		//factory method		start_item(req_item);										//trigger the arbitration
+		req_item.randomize();										
+		finish_item(req_item); 		//This passes to the driver get() call and is returned immediately
+		
+		get_response(rsp_item);		//Block until a response is received
+		
+		`uvm_info("body", rsp_item.convert2string(), UVM_LOW);
+	end
+endtask: body
+
+
+
+
+
+
+--------------------------------SEQUENCE GENERATION STYLES -----------------------------------
+1. SEQUENCE BASED STIMULUS
+
+
+- Three primary layers  exist in sequence based stimulus
+
+	- The master control thread which starts the sequences
+		- e.g. run task in an UVM test component or a high level sequence such as virtual sequence 
+			- the sequence gets started by sequence.start() method
+				- When sequence.start() is run, it will call the body() method
+					- Inside the body() method you will have individual sequences
+	
+	
+	- The individual sequences
+		- standalone sequences that simply send sequence_item's to a driver or execute subsequences
+	
+	- The sequence_item
+		- An object that enables a driver to perform pin level transactions
+			- Once sequence the sequence items are created, the driver then performs pin level transactions
+			
+
+
+- Sequence Execution Flows
+	- Sequence execution can have different flows
+	
+	1. Linear execution flow
+		- Sequence are executed one after another
+		
+	2. Parallel execution flow
+		- Sequence are started parallel in a fork..join
+		
+	3. Hierachical/Layered execution flow
+		- Top level sequence starts subsequences which could further start lower level sequences
+		
+
+2. Using fork..join to complete and DON'T DISABLE FORK 
+
+- Example
+
+task body();
+	//
+	// Code creating and randomizing the child sequences
+	//
+
+	fork
+		seq_A.start(m_sequencer);
+		seq_B.start(m_sequencer);
+		seq_C.start(m_sequencer);
+	join_any
+	
+	//First past the post completes the fork and disables it
+	disable fork;
+	
+	//Assuming seq_A completes first, seq_B and seq_C will be terminated in an indeterminate way
+	//This will lock up the sequencer
+	
+endtask
+
+
+3. Don't use fork..join_none to exit a body, instead use fork..join  in a higher level run_test()
+
+- Example
+
+task body();
+	
+	fork
+		...
+	join_none
+	
+endtask
+
+//The body task exits immediately
+
+
+4. Sequence libraries
+	- Multiple sequences are derived from a base sequence
+		- We can create a library of sequences and execute them in random order
+		
+	task body();
+		bus_seq_base seq_array[4];		//array of sequencers 
+		
+		seq_array[0] = n_m_rw_interleaved_seq::type_id::create("seq_0");
+		seq_array[1] = rwr_seq::type_id::create("seq_1");
+		seq_array[2] = n_m_rw_seq::type_id::create("seq_2");
+		seq_array[3] = fill_memory_seq::type_id::create("seq_3");
+		
+		//Shuffle the array contents into a random order
+		seq_array.shuffle();
+		
+		//Execute array items in turn
+		foreach(seq_array[i]) begin	
+			if(!seq_array[i].randomize()) begin
+				`uvm_error("body", "randomization failed for req");
+			end
+			
+			seq_array[i].start(m_sequencer);
+		end
+	endtask: body
+	
+	
+
+--------------------------------- VIRTUAL SEQUENCES -------------------------------------------
+
+
+- A sequence which controls stimulus generation using several sequencers.
+
+- Sequences, sequencers, and drivers focused on a single interfaces
+	- But most stimulus generation beed coordination across different interfaces and interactions between them
+
+- Virtual sequence contains handles for all of the target sequencers to start subsequences
+
+Example:
+
+//Creating a useful  virtual sequence type:
+
+typedef uvm_sequence #(uvm_sequence_item) uvm_virtual_sequence;
+
+	//Virtual sequence example:
+	class my_vseq extends uvm_virtual_sequence;
+	...
+	
+	//Handles for the target sequencers
+	a_sequencer_t a_sequencer;
+	b_sequencer_t b_sequencer;
+	
+		task body();
+	
+			...
+		
+			//Start interface specific sequences on the appropriate target sequencers:
+			aseq.start( a_sequencer, this );
+			bseq.start( b_sequencer, this ); 
+		
+		endtask
+		
+	endclass
+	
+	...
+
+----------------------------- TESTBENCH CONFIGURATION ------------------------------
+
+- Configuring testbenches for different parameters
+	- This is done for testbench reuse.
+		- Reusable testbenches need to be as configurable as possible
+
+- Example configurations: 
+	- for-loop limits, string names
+	- randomization weightages
+	- coverage bins
+	- other variable names that can be set runtime
+	
+
+- Organize all configuration variables in a testbench into multiple configuration objects
+	- Configuration objects could be tied to a specific UVM component
+	- Global configuration objects
+		- for global parameters
+	- Derive from uvm_object base class
+
+------------------------------------------------------------------------------------
+
