@@ -1,0 +1,4837 @@
+// WRITING UVM TESTBENCHES FOR NEWBIE
+
+//Code 1: HELLO WORLD and reporting
+
+`include "uvm_macros.svh"
+module tb;
+   import uvm_pkg::*;
+  
+  initial begin
+    `uvm_info("Test 1","Hello World", UVM_NONE);
+     uvm_report_info("TEST 2", "This is Reporting", UVM_MEDIUM);
+     uvm_report_info("TEST 2", "This is Reporting", UVM_FULL); 
+  end
+  
+endmodule
+
+//---------------------------------------------------
+
+//CODE 2: using UVM reporting macros
+
+import uvm_pkg::*;
+`include "uvm_macros.svh"		//Mandatory 2 lines for nearly all projects
+
+module tb;
+
+	initial begin
+		`uvm_info("MOD", "This is reporting", UVM_NONE);		// First arg "INFO" or "TRANS" will help where the msg is coming from
+		
+		`uvm_warning("MOD", "This is warning");
+		`uvm_error("MOD", "This is error");
+		`uvm_fatal("MOD", "This is fatal");			//will call $finish and stop simulation
+		
+		//warning, error, & fatal don't require verbosity because they have a default verbosity of UVM_NONE
+		//Statements after `uvm_error and `uvm_warning will be run
+
+	end
+
+endmodule
+
+//------------------------------ PRINTING VALUES OF VARIABLE ---------------------
+
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+ 
+module tb;
+  reg [4:0] a = 5'b10110;
+  integer i = 12;
+  
+  initial begin
+    `uvm_info("MODULE", $sformatf("Value of a : %0d and i : %0b", a, i), UVM_NONE);
+    `uvm_info("MODULE", $sformatf("Decimal value of a : %0d and i : %0d",a,i), UVM_NONE); 
+  end
+  
+  
+  
+endmodule
+
+//---------------------------------- TRANSACTION DATA PRINTING -----------------
+
+//Access to UVM package and macros
+import uvm_pkg::*;
+`include "uvm_macros.svh"			
+
+ 
+class transaction extends uvm_sequence_item;
+  rand bit [3:0] a;
+  rand bit [4:0] b;
+  rand bit [7:0] c;
+  
+  function new(input string inst = "TRANS");
+    super.new(inst);
+  endfunction
+  
+  
+  //Registering transaction in the UVM factory
+  `uvm_object_utils_begin(transaction)
+  `uvm_field_int(a, UVM_DEFAULT)
+  `uvm_field_int(b, UVM_DEFAULT)
+  `uvm_field_int(c, UVM_DEFAULT)
+  `uvm_object_utils_end
+  
+endclass
+ 
+module tb;
+  
+  transaction t;
+  
+  initial begin
+    t = new("TRANS");
+    t.randomize();
+    t.print(uvm_default_line_printer);		//Single line print of values
+	
+	//log file will show: TRANS: (transaction@335) { a: 'h6  b: 'h5  c: 'h23  }
+	
+	t.print();		//log will show values in a table form
+    
+  end
+  
+endmodule
+
+//----------------------------------------------------------------------------------
+
+
+//For an addition typedef
+
+typedef struct {			//struct allows different datatypes in one datatype
+  bit [3:0] a;
+  bit [3:0] b;
+  bit [4:0] c;
+} add_struct;
+ 
+module tb;
+  
+  add_struct t;
+  /* 
+		As soon as you create a handler for a struct, you allocate memory to it.
+		This is not the case for classes. Classes require a constructor
+	
+  */
+  
+  
+  
+  initial begin
+  t.a = 4'b1010;
+  t.b = 4'b0001;
+    
+  t.c = t.a + t.b; //algo
+  
+  //Any method that you want to get out of a structure should be used outside of it
+  // BUT IN class, you can have methods inside of it
+   
+    $display("Value of addition : %0d",t.c);
+    
+  
+  end
+  
+endmodule
+
+
+//----------------- SAME FUNCTIONALITY OF 4 BIT ADDER (above) BUT WIL CLASS ----------------------
+
+class add;
+  
+  bit [3:0] a;
+  bit [3:0] b;
+  bit [4:0] c;
+  
+  task add_two(input bit [3:0] a, input bit [3:0] b);
+  //input means that the user has to provide the values of a and b
+  
+    this.a = a;
+    this.b = b;
+    c = this.a + this.b;
+    $display("Result of addition : %0d",c);
+  endtask
+  
+endclass
+ 
+module tb;
+  
+  add t;
+  
+  initial begin
+  t = new();
+  //If you don't add new(), you will get an error: Null pointer access
+  //Why? 
+	//Because simply creating a handler for a class will not allocate memory
+	//You will need a constructor
+	//It is mandatory to have a constructor for a class to be usable
+	
+  
+    t.add_two(4'b0101, 4'b0011);  //add_two(first operand, second);
+  end
+  
+endmodule
+
+//----------------------------------------------------------------------------------------
+
+
+
+/*Write a Code to generate ranom stimulus for the module mentioned in the Instruction tab. Also print the value of the stimuli in the decimal format on the console.*/
+
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+
+class mul;
+
+  rand bit [15:0] a;
+  rand bit [15:0] b;
+  rand bit ctrl;
+  bit [31:0] y;
+
+	task printer_dec(input bit [15:0] a, input [15:0] b, input bit ctrl);
+		this.a = a;
+		this.b = b;
+		this.ctrl = ctrl;
+		
+      $display("a = %d	, b = %d	, ctrl = %d", a, b, ctrl);
+		
+		
+	endtask
+
+endclass
+
+module tb;
+	mul x;
+	int max_count = 10;
+	
+	initial begin
+		x=new();
+		
+      	for (int i=0; i<max_count; i++) begin
+			x.randomize();
+      		x.printer_dec(x.a, x.b, x.ctrl);
+		end
+	end
+endmodule
+
+
+/*OUTPUT
+
+# KERNEL: ASDB file was created in location /home/runner/dataset.asdb
+# KERNEL: a = 62278	, b =  7333	, ctrl = 1
+# KERNEL: a = 37588	, b =  7647	, ctrl = 1
+# KERNEL: a = 62907	, b = 12120	, ctrl = 1
+# KERNEL: a = 14040	, b = 46858	, ctrl = 0
+# KERNEL: a = 24203	, b = 46717	, ctrl = 1
+# KERNEL: a =  5412	, b = 14841	, ctrl = 1
+# KERNEL: a = 14417	, b = 32203	, ctrl = 1
+# KERNEL: a =  5035	, b =  9489	, ctrl = 1
+# KERNEL: a = 57623	, b = 31966	, ctrl = 1
+# KERNEL: a = 52024	, b = 29576	, ctrl = 1
+
+*/
+
+
+//--------------------- EXTENDED CLASS ---------------------------
+
+
+class add;
+  
+  bit [3:0] a;
+  bit [3:0] b;
+  bit [4:0] c;
+  
+  task add_two(input bit [3:0] a, input bit [3:0] b);
+    this.a = a;
+    this.b = b;
+    c = this.a + this.b;
+    $display("Result of addition : %0d",c);
+  endtask
+  
+endclass
+ 
+ 
+class mul extends add;
+  
+  bit [7:0] y = 0;
+  integer i;
+  
+  task mul_two(input bit [3:0] a, input bit [3:0] b);
+    for(i =0; i< a; i++) begin
+      y = y + b;
+      end
+    $display("Value of mul of a :%0d and b : %0d is %0d",a,b,y);
+endtask
+  
+  
+  
+endclass
+ 
+ 
+module tb;
+  
+  mul t;
+  
+  initial begin
+  t = new(); 
+  t.mul_two(4'b0101, 4'b0011);  //add_two(first operand, second);
+  end
+  
+endmodule
+
+//-------------------------- POLYMORPHISM ----------------------------------------
+
+class employee_record;				//parent class
+	int age;
+	string name;
+	
+	function new (input string name, input int age);
+		this.age  = age;
+		this.name = name;
+	endfunction
+	
+	virtual function void run();	//run function to be polymorphed
+		$display("Error");
+	endfunction
+ 
+endclass
+ 
+ 
+class hardware extends employee_record;
+ 
+	function new(input string name,input int age);
+		super.new(name,age);
+	endfunction
+	
+	function void run();
+		$display("Hardware Engg Name : %0s and Age : %0d",name,age);
+	endfunction
+ 
+endclass
+ 
+class software extends employee_record;
+ 
+	function new(input string name,input int age);
+		super.new(name,age);
+	endfunction
+	
+	function void run();
+		$display("Software Engg Name : %0s and Age : %0d",name,age);
+	endfunction
+ 
+endclass
+ 
+module tb;
+	employee_record e;
+	hardware h;
+	software s;
+	
+	initial begin
+		h = new("Jayesh", 25);
+		s = new("Dhiraj", 25);
+		e = h;
+		e.run();  
+		h.run();
+		s.run();
+	end
+ 
+endmodule
+
+
+//-------------------------------------------------------------------------------
+/*UVM Factory usage
+
+Factory allows us to dynamically change our classes, data members, and constraints.
+Otherwise, our classes would mostly be hardcoded
+
+	- You can use the inbuilt method "type_override" to dynamically change the behavior of a class
+	
+	
+--------------------------------------- ALL ABOUT CLASSES ------------------------------------
+
+uvm_object is the fundamental base class
+static class: 	belong to uvm_component, required for whole simulation time
+	- driver, monitor, scoreboard, agent, env, test
+dynamic class:	belong to uvm_object, required for certain period
+	- transaction / sequence_item
+	- sequence
+		- In SystemVerilog terms, we call the sequence a generator
+		
+How to register:
+To register the driver, mon, scb, agent, env, test class to the UVM factory, we have to follow the constructor and utils of the uvm_component. Same goes for transaction and sequence -> uvm_object
+	
+1. transaction/sequence_item
+	- uvm_sequence_item or uvm_transaction
+		- container for all I/O ports
+	
+2. sequence
+	- uvm_sequence
+		- Generate transactions (randomized or directed)
+		
+3. sequencer
+	- uvm_sequencer
+		- Send the generated transactions to the driver
+		
+4. Driver
+	- uvm_driver
+		- Take the generated transactions and send it to DUT with the help of interface
+		
+5. Monitor
+	- uvm_monitor
+		- Receive the response from the DUT
+		- Convert the DUT responses (coming from RTL) and convert it so that it could be read by scoreboard
+	
+6. Agent
+	- uvm_agent
+		- connect driver, sequence, and monitor together
+
+7. Scoreboard
+	- uvm_scoreboard
+		- COMP_Are with golden data
+		
+8. Environment
+	- uvm_env
+		- connection between agenet and scoreboard
+		
+9. Test
+	- uvm_test
+		- connect sequence and sequencer together
+		- creates an instance of the env
+		
+		
+------------------------------- USING UVM_OBJECT CLASS -----------------------------------------------
+
+Registering a class to UVM factory is required before using it. Registering the class to the factory can happen in two ways
+1. Registering data fields
+2. Registering the entire class
+
+This code is dealing with the first way
+
+
+For uvm_object, we register the data inside
+For uvm_component, we register the class
+
+*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class simple extends uvm_object;
+ 
+	rand bit [3:0] a;
+	string inst;
+	rand bit [3:0] b[4];
+	
+	//Constructor
+	//	needs to follow the same pattern as the uvm_object
+	//	constructor of uvm_object has only a single argument i.e. instance name
+	function new(input string inst = "INST");
+		super.new(inst);
+		this.inst = inst;
+	endfunction
+	
+	
+	//Registering the data fields in the factory, utilizing macros
+	`uvm_object_utils_begin(simple)
+		`uvm_field_int(a,UVM_DEFAULT)				//registering the scalar
+		`uvm_field_sarray_int(b, UVM_DEFAULT)
+		`uvm_field_string(inst, UVM_DEFAULT)
+	`uvm_object_utils_end
+ 
+endclass
+ 
+module tb;
+	simple s;				//s is the handler for the class
+	
+	initial begin
+		s = new("INST");
+		s.randomize();		//randomize the data
+		s.print();			//printing facility in the factory
+	end
+endmodule
+
+//---------------------------------------------
+
+/*Create class extending uvm_object base class consisting of three data members (reg [3:0] a, reg [7:0] b, reg [15:0] c). Use the Random number facility of SV to generate a random number for b and c. Finally, print the value of all the data members on the Console.*/
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class assignment_class extends uvm_object;
+  	reg [3:0] a=0;
+	rand reg [7:0] b;
+	rand reg [15:0] c;
+  	string inst;
+	
+	function new(input string inst = "INST");
+		super.new(inst);
+		this.inst = inst;
+	endfunction
+	
+	`uvm_object_utils_begin(assignment_class)
+		`uvm_field_int(a,UVM_DEFAULT)				
+		`uvm_field_int(b, UVM_DEFAULT)
+		`uvm_field_int(c, UVM_DEFAULT)
+		`uvm_field_string(inst, UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+
+module tb;
+	assignment_class asc;				
+	
+	initial begin
+		asc = new("INST");
+		asc.randomize();
+		asc.print();
+	end
+endmodule
+/*	
+# KERNEL: --------------------------------------
+# KERNEL: Name    Type              Size  Value 
+# KERNEL: --------------------------------------
+# KERNEL: INST    assignment_class  -     @335  
+# KERNEL:   a     integral          4     'h0   
+# KERNEL:   b     integral          8     'h46  
+# KERNEL:   c     integral          16    'h1ca5
+# KERNEL:   inst  string            4     INST  
+# KERNEL: --------------------------------------
+*/
+
+
+
+//----------------------------------- USING UVM_COMPONENT CLASS --------------------
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class simple extends uvm_component;
+	`uvm_component_utils(simple)		//registering the class to UVM factory
+ 
+	string name;
+	
+	
+	//Constructor
+	// constructor needs instance name and uvm_component: two args
+	function new(input string name, uvm_component c);
+		super.new(name, c);
+		this.name = name;
+	endfunction
+	
+	
+	task run();
+		$display("Instance Name : %0s",name);
+	endtask
+	
+	endclass
+	
+	
+	module tb;
+		simple s;
+		
+		initial begin
+			s = new("comp", null);	 //Specifying the 2nd arg as null means that this is a child class
+			s.run();
+	end
+ 
+endmodule
+
+//------------------------------------------------------------------------------------
+
+
+/*Create a class by extending uvm_component consisting of the three data members (reg [3:0] a, reg [3:0] b and reg [4:0] c), create a method that takes two arguments from user to update data members (a and b). Update data member c with the result of addition of the a and b and print all data members.*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class assignment_class extends uvm_component;
+	`uvm_component_utils(assignment_class)		//registering the class to UVM factory
+	
+	reg [3:0] a;
+	reg [3:0] b;
+	reg [4:0] c;
+	
+	string name;
+	
+	
+	//Constructor
+	// constructor needs instance name and uvm_component: two args
+	function new(input string name, uvm_component c);
+		super.new(name, c);
+		this.name = name;
+	endfunction
+	
+	function assignment_add (input reg[3:0] a, input reg [3:0] b);
+		this.a = a;
+		this.b = b;
+		c = this.a + this.b;
+		$display("result of addition: c=%0d", c);
+	endfunction
+	
+	
+	task run();
+		$display("Instance Name : %0s",name);
+	endtask
+	
+endclass
+	
+	
+	module tb;
+		assignment_class asc;
+		
+		initial begin
+			asc = new("comp", null);	
+			asc.assignment_add(4'b1010,4'b1111);
+			asc.print();
+		end
+	endmodule
+	
+	
+//---------------------------- PRINTING SPECIFIC DATA WITH DO_PRINT METHOD ----------------
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class simple extends uvm_object;
+	`uvm_object_utils(simple)		//registering class to factory
+	
+	rand bit [3:0] a;
+	rand bit [7:0] b;
+	string inst;
+	
+	function new(input string inst = "INST");
+		super.new(inst);
+		this.inst = inst;
+	endfunction
+	
+	virtual function void do_print(uvm_printer printer);	
+		super.do_print(printer);
+		printer.print_field_int("a", a,$bits(a),UVM_DEC);
+		printer.print_string("INST",inst);
+		
+		//PRINTING ONLY a AND inst, NOT b
+	endfunction
+	
+	//virtual keyword is used when you expect the function to be changed in a child class
+ 
+endclass
+ 
+ 
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	function new(input string name, uvm_component c);
+		super.new(name,c);
+	endfunction
+	
+	function void build_phase(uvm_phase phase);
+		simple s = simple::type_id::create("INST");		//create an object for our class
+		s.randomize();
+		s.print();
+	endfunction
+ 
+endclass
+ 
+module tb;
+	test t;
+	
+	initial begin
+		t = new("TEST",null);
+		run_test();
+	end
+endmodule
+
+//---------------------------------------
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class simple extends uvm_object;
+ 
+	rand bit [3:0] a;
+	rand bit [3:0] b[4];
+	string inst;
+	
+	function new(input string inst = "INST");
+		super.new(inst);
+		this.inst = inst;
+	endfunction
+	
+	`uvm_object_utils_begin(simple)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_sarray_int(b, UVM_DEFAULT)
+		`uvm_field_string(inst, UVM_DEFAULT);
+	`uvm_object_utils_end
+ 
+endclass
+ 
+ 
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	function new(input string name, uvm_component c);
+		super.new(name,c);
+	endfunction
+	
+	function void build_phase(uvm_phase phase);			//uvm_phase phase should be exactly the same 
+		simple s = simple::type_id::create("INST");		//create object of the class
+		s.randomize();
+		s.print();
+	endfunction
+	
+endclass
+ 
+module tb;
+test t;
+ 
+initial begin
+t = new("TEST",null);
+run_test();
+end
+endmodule
+ 
+/* 
+
+new() vs create()
+
+---
+
+The create function goes through the UVM factory and checks for registered type or instance overrides. This allows for objects or components to be replaced by derived types using the factory. I would suggest reading up on Factory Pattern, which is a key concept in UVM.
+
+The new function is a SystemVerilog constructor for an object and is called everytime an object is to be created (whether through the factory or not).
+
+---
+
+There is a difference between the code that calls for the construction of a class object, and the code that implements the construction of a class object.
+
+The code that calls for the construction of another class object has a choice of calling new() or create() depending on whether the class you want to construct is registered with the factory. You need to search for material that describes the UVM factory.
+
+Then there is the code you want use that implements the construction of a class object, which is what you normally put inside the body of the new() method. For classes derived from uvm_component, we suggest that you put the minimum amount of code required by SystemVerilog, like calling super.new(), and put the rest of the code in the build_phase(). Then, if and when you extend that class, you can override the code in the build_phase to do something different. You can't do that with code in the new() method because you are required to call super.new()
+
+----------------------------------------------------------------
+
+Base Class: A class from which other class are created, so UVM has a certain set of the base classes which are utilized for the creation of class required to construct Testbench.
+
+The most useful base class for us will be UVM_OBJECT and UVM_COMPONENT.
+
+All the other classes are extended from this core base class. for e.g., the UVM_REPORT_OBJECT class which is used to interact with the reporter is extended from the UVM_OBJECT so for this UVM_OBJECT is the base class while UVM_REPORT_OBJECT is the derived class.
+
+RULE 1 (IEEE 1800 - 2012): whenever the user creates a class by extending the base class, the first statement inside the constructor must be super.new(), if the user forgets to add super.new() compiler should automatically insert this statement in the constructor.
+
+The user should always explicitly add super.new() as the first statement in the Constructor.
+
+
+*/
+class USER_CLASS extends BASE_CLASS;
+  
+  
+  function new( arguments);
+    super.new(arguments);
+  endfunction
+  
+  
+endclass
+
+
+/*Utility Macro is primary method to register the component/object/field to the Factory for correct operation.
+
+This step is MANDATORY for all user defined class.
+
+
+*/
+//1) Component Utility Macro:
+
+class display extends uvm_component;
+  
+  `uvm_component_utils (display)
+  
+endclass
+
+
+//2) Object Utility Macro:
+
+class display extends uvm_object;
+  
+  `uvm_object_utils(display)
+  
+endclass
+
+
+//3) Field Utility Macro :
+
+class display extends uvm_report_object;
+  
+  rand bit [3:0] data1;
+  rand bit [3:0] data2;
+   
+  
+  `uvm_object_utils_begin(display)
+  `uvm_field_int(data1, UVM_DEFAULT);
+  `uvm_field_int(data2, UVM_DEFAULT);
+  `uvm_object_utils_end
+  
+  
+endclass
+
+
+//------------------------------------------------------------------------------
+
+
+////////////////// SEQUENCE ITEM SECTION ////////////////////////
+
+
+//--------------------------------------------- EXAMPLE 1 ---------------------------------
+
+/////////////////////// Module RTL ////////////////////////////////
+
+module addr(			// 4 bit adder
+ 
+  input [3:0] a,
+  input [3:0] b,
+  output [4:0] sum
+);
+  
+endmodule
+
+
+//////////////////////////// Transaction in UVM ///////////////////////
+
+`include "uvm_macros.svh"
+ import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+		//all data is handled by uvm_sequence_item
+  
+  rand bit [3:0] a;
+  rand bit [3:0] b;
+  bit [4:0] sum;
+  
+  
+  
+  
+  `uvm_object_utils_begin(transaction)		//registering into the factory
+	`uvm_field_int(a,UVM_DEFAULT)
+	`uvm_field_int(b,UVM_DEFAULT)
+	`uvm_field_int(sum,UVM_DEFAULT)
+  `uvm_object_utils_end
+  
+  
+  function new(string name = "SEQ");
+    super.new(name);
+  endfunction
+  
+endclass
+
+
+//--------------------------------------------- EXAMPLE 2 ---------------------------------
+
+
+/////////////////////// Module RTL ////////////////////////////////
+
+module bram(		//8 bit RAM, 12 bit address bus, clk and reset functionality
+ 
+  input [7:0] din,
+  input [11:0] addr,
+  input wr,
+  input clk,
+  input rst,
+  output [7:0] dout
+ 
+);
+  
+  
+endmodule
+
+
+//////////////////////////// Transaction in UVM ///////////////////////
+
+`include "uvm_macros.svh"
+   import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+  
+  rand bit[7:0] din;
+  rand bit [11:0] addr;
+  rand bit wr;
+  rand bit clk;
+  rand bit rst;
+  bit [7:0] dout;
+  
+  `uvm_object_utils_begin(transaction)
+	`uvm_field_int(din, UVM_DEFAULT)
+	`uvm_field_int(addr, UVM_DEFAULT)
+	`uvm_field_int(wr, UVM_DEFAULT)
+	`uvm_field_int(clk, UVM_DEFAULT)
+	`uvm_field_int(rst, UVM_DEFAULT)
+	`uvm_field_int(dout, UVM_DEFAULT)
+  `uvm_object_utils_end
+  
+
+  function new(string name = "SEQ");
+    super.new(name);
+  endfunction
+  
+  
+endclass
+
+
+//---------------------------------- PRINTING TRANSACTION DATA ---------------------------------
+
+`include "uvm_macros.svh"
+   import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+  
+  rand bit [7:0] data;
+  rand bit [11:0] addr;
+  rand bit [3:0] dout;
+  
+  `uvm_object_utils_begin(transaction)
+  `uvm_field_int(data,UVM_DEFAULT)
+  `uvm_field_int(addr,UVM_DEFAULT)
+  `uvm_field_int(dout,UVM_DEFAULT)
+  `uvm_object_utils_end
+  
+  
+  function new(string name = "TRANS");
+    super.new(name);
+  endfunction
+  
+endclass
+ 
+///////uvm_test -> uvm_component
+class test extends uvm_test;
+  `uvm_component_utils(test)
+  
+  function new(string name = "TEST", uvm_component p = null);
+    super.new(name, p);
+  endfunction
+  
+  virtual task run();
+    transaction trans = new();
+    trans.randomize();
+    trans.print(uvm_default_line_printer);    
+  endtask
+  
+  
+endclass  
+ 
+///////////////////////////////////////////////
+ 
+ 
+ 
+module tb;
+  
+  test t;
+  
+  initial begin
+    t = new();
+    run_test();
+ 
+  end
+  
+  
+endmodule
+
+//------------------------------------ ASSIGNMENT ----------------------------------
+
+//Create transaction class extending uvm_sequence_item for the RTL module mentioned in the Instruction tab also print the value of the data members inside the class after randomization. Submit your code and Console output.
+
+
+//////////////////////  module ////////////////////
+module dff
+(
+input [3:0] mode,
+input rst,
+input clk,
+input din,
+output dout,
+output dbar
+);
+endmodule
+
+
+//-------------------------------------------------
+
+import uvm_pkg::*;
+`include "uvm_macros.svh";
+
+class transaction extends uvm_sequence_item;
+
+	rand bit [3:0] mode;
+	rand bit rst;
+	rand bit clk;
+	rand bit din;
+	bit dout;
+	bit dbar;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(mode,UVM_DEFAULT)
+		`uvm_field_int(rst,UVM_DEFAULT)
+		`uvm_field_int(clk,UVM_DEFAULT)
+		`uvm_field_int(din,UVM_DEFAULT)
+		`uvm_field_int(dout,UVM_DEFAULT)
+		`uvm_field_int(dbar,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	function new(string name="TRANS");
+		super.new(name);
+	endfunction
+	
+endclass
+
+class test extends uvm_component;
+
+	`uvm_component_utils(test)
+	
+	function new(string name="TEST",uvm_component p = null);
+		super.new(name,p);
+	endfunction
+	
+	virtual task run();
+		transaction trans;
+		trans=new();
+		trans.randomize();
+		trans.print();
+	endtask
+endclass
+
+module tb;
+	test t;
+	initial begin
+		t=new();
+		run_test();
+	end
+endmodule
+
+/*------------------
+
+# KERNEL: UVM_INFO @ 0: reporter [RNTST] Running test ...
+# KERNEL: --------------------------------
+# KERNEL: Name    Type         Size  Value
+# KERNEL: --------------------------------
+# KERNEL: TRANS   transaction  -     @356 
+# KERNEL:   mode  integral     4     'h0  
+# KERNEL:   rst   integral     1     'h0  
+# KERNEL:   clk   integral     1     'h1  
+# KERNEL:   din   integral     1     'h1  
+# KERNEL:   dout  integral     1     'h0  
+# KERNEL:   dbar  integral     1     'h0  
+# KERNEL: --------------------------------
+
+
+*/
+
+
+/*
+Create transaction class extending uvm_sequence_item for the RTL module mentioned in the Instruction tab also print the value of the data members inside the class after randomization.
+*/
+
+module counter
+(
+input [3:0] mode,
+input rst,
+input clk,
+input [15:0] loaddata,
+input loadin,
+output [15 : 0] dout
+);
+endmodule
+
+
+
+class transaction extends uvm_sequence_item;
+
+	rand bit [3:0] mode;
+	rand bit rst;
+	rand bit clk;
+	rand bit [15:0] loaddata;
+	rand bit loadin;
+	bit [15:0] dout;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(mode,UVM_DEFAULT)
+		`uvm_field_int(rst,UVM_DEFAULT)
+		`uvm_field_int(clk,UVM_DEFAULT)
+		`uvm_field_int(loaddata,UVM_DEFAULT)
+		`uvm_field_int(loadin,UVM_DEFAULT)
+		`uvm_field_int(dout,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	function new(string name="TRANS");
+		super.new(name);
+	endfunction
+	
+endclass
+
+class test extends uvm_component;
+	
+	`uvm_component_utils(test)
+	
+	function new(string name="TEST",uvm_component p = null);
+		super.new(name,p);
+	endfunction
+	
+	virtual task run();
+		transaction t=new();
+		t.randomize();
+		t.print();
+	endtask
+	
+endclass
+
+module tb;
+
+	test t;
+	
+	initial begin
+		t=new();
+		run_test();
+	end
+	
+endmodule
+
+/*-----------------
+
+# KERNEL: -------------------------------------
+# KERNEL: Name        Type         Size  Value 
+# KERNEL: -------------------------------------
+# KERNEL: TRANS       transaction  -     @356  
+# KERNEL:   mode      integral     4     'h0   
+# KERNEL:   rst       integral     1     'h0   
+# KERNEL:   clk       integral     1     'h1   
+# KERNEL:   loaddata  integral     16    'hba9d
+# KERNEL:   loadin    integral     1     'h1   
+# KERNEL:   dout      integral     16    'h0   
+# KERNEL: -------------------------------------
+
+*/
+
+
+
+//////////////////////////////// INTERPROCESS COMMUNICATION SECTION ///////////////////////////////
+
+
+
+//----------------------- UNDERSTANDING UVM PHASES ----------------------
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class driver extends uvm_driver;
+	`uvm_component_utils(driver)
+	
+	function new(input string inst, uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	
+	// UVM has different phases for synchronization
+		//Format has to be the exact same as the base class
+		//There are more phases, but these are the most frequently used 
+	
+	
+	virtual function void build_phase(uvm_phase phase);		//Prior to the simulation, creating objects for TLM ports and exports
+		super.build_phase(phase);
+		`uvm_info("DRV", "Build Phase", UVM_NONE);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);	//connecting ports and exports for TLM communication. Requires objects to be already created
+		super.connect_phase(phase);
+		`uvm_info("DRV", "Connect Phase", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);			//Applying stimulus and capturing response. Only run_phase is a virtual task and the rest are virtual functions.
+		`uvm_info("DRV", "Run Phase", UVM_NONE);	
+	endtask
+	
+	virtual function void report_phase(uvm_phase phase);	//Show results after simulation
+		super.report_phase(phase);
+		`uvm_info("DRV", "Report Phase", UVM_NONE);
+	endfunction
+	
+endclass
+ 
+ 
+ 
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+ 
+	function new(input string inst, uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		`uvm_info("MON", "Build Phase", UVM_NONE);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		`uvm_info("MON", "Connect Phase", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		`uvm_info("MON", "Run Phase", UVM_NONE);
+	endtask
+	
+	virtual function void report_phase(uvm_phase phase);
+		super.report_phase(phase);
+		`uvm_info("MON", "Report Phase", UVM_NONE);
+	endfunction
+ 
+endclass
+ 
+class agent extends uvm_agent;
+	`uvm_component_utils(agent)
+	
+	
+	//handlers for monitor and driver
+	monitor m;
+	driver d;
+	
+	function new(input string inst, uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		`uvm_info("AGENT", "Build Phase", UVM_NONE);
+		m = monitor::type_id::create("MON",this);		//Need to create monitor and driver objects
+		d = driver::type_id::create("DRV", this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		`uvm_info("AGENT", "Connect Phase", UVM_NONE);
+	endfunction
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		`uvm_info("AGENT", "Run Phase", UVM_NONE);
+	endtask
+	
+	virtual function void report_phase(uvm_phase phase);
+		super.report_phase(phase);
+		`uvm_info("AGENT", "Report Phase", UVM_NONE);
+	endfunction
+ 
+endclass
+ 
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	agent a;
+	
+	function new(input string inst, uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		`uvm_info("ENV", "Build Phase", UVM_NONE);
+		a = agent::type_id::create("AGENT",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		`uvm_info("ENV", "Connect Phase", UVM_NONE);
+	endfunction
+	
+	
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		`uvm_info("ENV", "Run Phase", UVM_NONE);
+	endtask
+	
+	virtual function void report_phase(uvm_phase phase);
+		super.report_phase(phase);
+		`uvm_info("ENV", "Report Phase", UVM_NONE);
+	endfunction
+	
+endclass
+	
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	//purpose of test is to connect sequence and sequencer. This would also need an instance of env
+	
+	env e;
+	
+	function new(input string inst, uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		`uvm_info("TEST", "Build Phase", UVM_NONE);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	virtual function void end_of_elaboration_phase(uvm_phase phase);	//mandatory in test class
+		super.end_of_elaboration_phase(phase);
+		print();
+	endfunction
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		`uvm_info("TEST", "Run Phase", UVM_NONE);
+		#100;
+		global_stop_request();		//halt the simulation
+	endtask
+	
+	
+endclass
+	
+	
+	
+module tb2();
+	
+	test t;
+	
+	initial begin
+		t = new("TEST", null);
+		run_test();
+	end 
+	
+endmodule
+	
+
+//------------------------- TLM COMMUNICATION ----------------------
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	
+	rand bit [3:0] a;
+	rand bit [7:0] b;
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_int(b, UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+	
+	
+	
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+	transaction t;
+	
+	uvm_blocking_put_port #(transaction) send;	//transaction: the type of data to be sent to the consumer
+												//send: instance name
+												//need to be added above the constructor so that it can be usable by the constructor as send = new(...)
+	
+	
+	virtual function void build_phase(uvm_phase phase);		//create object of transaction
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	function new(input string inst = "PROD", uvm_component c);
+		super.new(inst, c);
+		send  = new("PUT", this);
+	endfunction
+	
+	task run();
+		t.randomize();		//randomize the data in the transaction
+		t.print();			//print the data on the console before being sent
+		send.put(t);		//send data to the consumer
+	endtask
+	
+endclass
+
+//After the producer class, we need to create the consumer class
+	
+class consumer extends uvm_component;
+	`uvm_component_utils(consumer)
+	
+	uvm_blocking_put_imp #(transaction,consumer)  recv;
+		
+			//Args needed: data type which we will be receiving (transaction) and class name
+			//recv: instance name
+	
+	function new(input string inst = "CONS", uvm_component c);
+		super.new(inst, c);
+		recv  = new("RECV", this);
+	endfunction
+	
+	virtual task put(input transaction t);
+		t.print();		//best to print so that we can check whether the data we are getting from the producer matches with the consumer
+	endtask
+	
+endclass
+
+
+//Now to create environment where we will create an object for the producer and the consumer and we will connect them together
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	producer p;
+	consumer c;
+	
+	//constructor
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	//create object of producer and consumer in the build phase
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);						//to make this function usable
+		p = producer::type_id::create("PROD", this);
+		c = consumer::type_id::create("CONS", this);
+	endfunction
+	
+	//connecting the producer and the consumer in the connect phase
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		p.send.connect(c.recv);
+					//How does it connect?
+						// p = consumer
+						// it has a class , p.send
+						// Inside the "connect", we specify the instance name and class of the consumer
+	endfunction
+	
+	
+endclass
+
+
+//The basic functionality has been defined so far. 
+// Now to create the test class and testbench 
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)  //register test to UVM factory
+	
+	//create an instance of the environment
+	env e;
+	
+	//constructor
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	//build phase to create the object for our test
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	//run phase needs to call a task, not function
+	virtual task run_phase(uvm_phase phase);
+		#100;				//random delay: to be addressed later: how to stop simulation once the operation for a specific class is finished
+		global_stop_request();
+	endtask
+	
+endclass
+	
+	
+//testbench to call the test
+module tb2;
+	test t;
+	
+	
+	initial begin
+		t = new("TEST", null);
+		run_test();
+	end
+	
+	
+endmodule
+ 
+ 
+ /*------------------ SUMMARY OF ABOVE CODE ----------------
+ 
+ On the sender side:
+ 1. Declare uvm_blocking_put_port
+	- This is a parameterized class 
+		- declare type of data object in #()
+			- like this:		uvm_blocking_put_port #(type of data object) user_defined_name;
+
+2. Instantiation of port with new() method is mandatory
+
+3. Packets are send by calling put method 
+ 
+ 
+ On the receiver side:
+ 1. Declare uvm_blocking_put_imp
+ 
+ 2. Instantiate new method
+ 
+ 3. Implementation of put method happen in receiver class
+ 
+ 
+ 
+ ** Connection between port and its implementation happens in higher class 
+	- Env, test using connect phase 
+	
+ 
+ */
+ 
+ 
+ 
+ /*---------------------------------------- ASSIGNMENT --------------------------------------
+ Assume producer class consists of two data members (reg [7:0] a = 8'h12 and reg [15:0] b = 16'hffff). Use TLM blocking port to communicate this data to Consumer class. Also, print data member values in both Producer and Consumer class for verification.*/
+ 
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+
+class transaction extends uvm_sequence_item;
+	rand bit [7:0] a = 8'h12;
+	rand bit [15:0] b = 16'hffff;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a,UVM_DEFAULT)
+		`uvm_field_int(b,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	function new(input string inst="TRAN");
+		super.new(inst);
+	endfunction
+	
+endclass
+	
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+
+	transaction t;
+
+	//adding blocking port
+	uvm_blocking_put_port #(transaction) send;
+
+	function new(string name="PROD",uvm_component c);
+		super.new(name,c);
+		send=new("PUT",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	task run();
+		t.randomize();
+		t.print();
+		send.put(t);
+	endtask
+endclass
+	
+class consumer extends uvm_component;
+	`uvm_component_utils(consumer)
+	
+	uvm_blocking_put_imp #(transaction,consumer)  recv;
+		function new(string name="CONS",uvm_component c);
+		super.new(name,c);
+		recv=new("RECV",this);
+	endfunction
+	
+	virtual task put(transaction t);
+		t.print();
+	endtask
+endclass
+
+class env extends uvm_env;
+	`uvm_component_utils(env)
+
+	producer p;
+	consumer c;
+	
+	function new(string name="ENV",uvm_component c);
+		super.new(name,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		p=producer::type_id::create("PROD",this);
+		c=consumer::type_id::create("CONS",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		p.send.connect(c.recv);
+	endfunction
+endclass
+	
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	env e;
+	
+	function new(string name="TEST",uvm_component c);
+		super.new(name,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e=env::type_id::create("ENV",this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		#100;
+		global_stop_request();
+	endtask
+endclass
+	
+module tb2;
+	test t;
+	initial begin
+		t=new("TEST",null);
+		run_test();
+	end
+endmodule
+
+
+/*---------------------------------------------------
+
+# KERNEL: UVM_INFO @ 0: reporter [RNTST] Running test ...
+# KERNEL: --------------------------------
+# KERNEL: Name   Type         Size  Value 
+# KERNEL: --------------------------------
+# KERNEL: TRANS  transaction  -     @395  
+# KERNEL:   a    integral     8     'hef  
+# KERNEL:   b    integral     16    'h864b
+# KERNEL: --------------------------------
+# KERNEL: --------------------------------
+# KERNEL: Name   Type         Size  Value 
+# KERNEL: --------------------------------
+# KERNEL: TRANS  transaction  -     @395  
+# KERNEL:   a    integral     8     'hef  
+# KERNEL:   b    integral     16    'h864b
+# KERNEL: --------------------------------
+
+*/
+
+
+
+/* ----------------------------------------- ASSIGNMENT ----------------------------
+Design SV testbench capable of sending the data (reg [7:0] din = 8'h11) from Component A to Component B using TLM blocking Port.*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+
+class transaction extends uvm_sequence_item;
+	bit [7:0] din = 8'h11;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(din,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	function new(input string name="TRANS");
+		super.new(name);
+	endfunction
+	
+endclass
+	
+class comp_A extends uvm_component;
+	transaction t;
+	`uvm_component_utils(comp_A)
+	uvm_blocking_put_port #(transaction) send;
+	
+	function new(string name="COMP_A",uvm_component c);
+		super.new(name,c);
+		send=new("PUT",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	virtual task run();
+		t.randomize();
+		t.print();
+		send.put(t);
+	endtask
+	
+endclass
+	
+class comp_B extends uvm_component;
+	`uvm_component_utils(comp_B)
+	uvm_blocking_put_imp #(transaction,comp_B) recv;
+	
+	function new(string name="COMP_B",uvm_component c);
+		super.new(name,c);
+		recv=new("RECV",this);
+	endfunction
+	
+	virtual task put(transaction t);
+		t.print();
+	endtask
+	
+endclass
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	comp_A ca;
+	comp_B cb;
+	
+	function new(string name="ENV",uvm_component c);
+		super.new(name,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		ca=comp_A::type_id::create("COMP_A",this);
+		cb=comp_B::type_id::create("COMP_B",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		ca.send.connect(cb.recv);
+	endfunction
+endclass
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	env e;
+	
+	function new(string name="TEST",uvm_component c);
+		super.new(name,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e=env::type_id::create("ENV",this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		#100;
+		global_stop_request();
+	endtask
+	
+endclass
+	
+module tb;
+	test t;
+	initial begin
+		t=new("TEST",null);
+		run_test();
+	end
+endmodule
+
+
+/*
+
+# KERNEL: UVM_INFO @ 0: reporter [RNTST] Running test ...
+# KERNEL: -------------------------------
+# KERNEL: Name   Type         Size  Value
+# KERNEL: -------------------------------
+# KERNEL: TRANS  transaction  -     @395 
+# KERNEL:   din  integral     8     'h11 
+# KERNEL: -------------------------------
+# KERNEL: -------------------------------
+# KERNEL: Name   Type         Size  Value
+# KERNEL: -------------------------------
+# KERNEL: TRANS  transaction  -     @395 
+# KERNEL:   din  integral     8     'h11 
+# KERNEL: -------------------------------
+
+*/
+
+
+
+/*---------------------------------- ALTERNATIVE FOR GLOBAL_STOP_REQUEST -----------------------
+
+As mentioned earlier, we had given a delay of #100 before global_stop_request(). This is fine if our stimulus is being delivered in this timeframe. 
+
+But what if we're not sure and we need to stop the simulation as soon as we know that we are done. It may require a time more than #100. What should be the code this way?
+
+----------- EARLIER CODE ----------
+ 	
+	virtual task run_phase(uvm_phase phase);
+		#100;
+		global_stop_request();
+	endtask
+	
+-----------------------------------
+
+We need to tell the simulator to wait until we're done sending all the transactions.
+	- A finite amount of transactions
+	
+	
+- In the producer class, edit the run_phase to have finite amount of transactions
+	- Use objections
+	
+
+
+*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	
+	rand bit [3:0] a;
+	rand bit [7:0] b;
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_int(b, UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+	
+	
+	
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+	transaction t;
+	integer i;
+	
+	uvm_blocking_put_port #(transaction) send;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	function new(input string inst = "PROD", uvm_component c);
+		super.new(inst, c);
+		send  = new("PUT", this);
+	endfunction
+	
+	//create a finite number of transactions
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);			//raise an objection, then give the stimulus 
+												//tell the simulator to wait until we complete our task  until we forcefully call drop_objection
+		
+		for(i =0; i<10; i++) begin
+			t.randomize();
+			`uvm_info("PROD", "Sending data to Consumer", UVM_NONE);
+			t.print(uvm_default_line_printer);	//uvm_default_line_printer: to see all the stimulus in a single line: OPTIONAL. Otherwise you'll see 10 tables
+			send.put(t);
+			#10;
+		end
+		
+		phase.drop_objection(phase);			//drop the objection: tell the simulator that our task is done
+	endtask
+	
+endclass
+	
+	class consumer extends uvm_component;
+	`uvm_component_utils(consumer)
+	
+	uvm_blocking_put_imp #(transaction,consumer)  recv;
+	
+	function new(input string inst = "CONS", uvm_component c);
+		super.new(inst, c);
+		recv  = new("RECV", this);
+	endfunction
+	
+	virtual task put(input transaction t);
+		`uvm_info("CON", "Rcvd data from Producer", UVM_NONE);
+		t.print(uvm_default_line_printer);		
+	endtask
+	
+	endclass
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	producer p;
+	consumer c;
+	
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		p = producer::type_id::create("PROD",this);
+		c = consumer::type_id::create("CONS", this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		p.send.connect(c.recv);
+	endfunction
+	
+	
+endclass
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	env e;
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	
+endclass
+	
+module tb2;
+	test t;	
+	
+	initial begin
+		t = new("TEST", null);
+		run_test();
+	end
+	
+	
+endmodule
+
+
+
+
+/*------------------------------ TLM FIFO PART 1 ------------------
+
+When the producer and the consumer are not operating at the same rate, we would need a TLM FIFO.
+
+*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+	
+	integer i;
+	
+	uvm_blocking_put_port #(integer) send;
+	
+	function new(input string inst = "CONS", uvm_component c);
+		super.new(inst, c);
+		send = new("PUT", this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		
+		for(i = 0; i < 10; i++) begin
+			`uvm_info("PROD", $sformatf("Data send : %0d",i),UVM_NONE);
+			send.put(i);		//we're only sending "i" to the producer
+			#10;		//RATE: PRODUCES AFTER 10 CYCLES (CHANGEABLE)
+		end
+		
+		phase.drop_objection(phase);
+	endtask
+endclass
+	
+	
+class consumer extends uvm_component;
+	`uvm_component_utils(consumer)
+	
+	integer i;
+	integer data;		//because the data received into the FIFO needs to be stored somewhere
+	
+	uvm_blocking_get_port #(integer) recv;
+	/*
+		When we're planning to use FIFO, we must use uvm_blocking_get_port because we want to get from a FIFO and it wouldn't come at the same rate.
+	*/
+	
+	function new(input string inst = "CONS", uvm_component c);
+		super.new(inst, c);
+		recv = new("GET", this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		
+		for(i = 0; i < 10; i++) begin
+			recv.get(data);
+			`uvm_info("CONS", $sformatf("Data recv : %0d",data),UVM_NONE);
+			#10;		//RATE: CONSUMES AFTER 10 CYCLES (CHANGEABLE)
+		end
+		
+		phase.drop_objection(phase);
+	endtask
+	
+endclass
+
+//Now to connect the producer and the consumer
+	
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	producer p;
+	consumer c;
+	
+	uvm_tlm_fifo #(integer) fifo;		//creating an instance of UVM FIFO
+	
+	virtual function void build_phase(uvm_phase phase);		//create objects in the build phase
+		super.build_phase(phase);
+		p = producer::type_id::create("PROD",this);
+		c = consumer::type_id::create("CONS",this);
+		fifo = new("FIFO", this, 10);	//creating an object of FIFO that has the capability to store 10 inputs
+	endfunction
+	
+	
+	//connecting the producer to the consumer through the FIFO
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		p.send.connect(fifo.put_export);		//producer puts into the FIFO
+		c.recv.connect(fifo.get_export);		//consumer gets from the FIFO
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			#10;
+			
+			if(fifo.is_full())
+				begin
+					`uvm_info("ENV", "FIFO is full",UVM_NONE);
+				end
+			else
+				begin
+					`uvm_info("ENV", "FIFO is not full yet",UVM_NONE);
+				end
+		end
+	endtask
+endclass
+	
+//Now to create the test 
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	env e;
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	
+endclass
+	
+module tb;
+	test t;
+	
+	initial begin
+		t = new("TEST", null);
+		run_test();
+	end 
+	
+	
+endmodule
+
+/*--------------------------- TLM FIFO PART 2 -----------------------------
+Now to send transactions 
+
+*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	
+	rand bit [3:0] a;
+	rand bit [7:0] b;
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_int(b, UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+	
+	
+
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+	transaction t;
+	
+	integer i;
+	
+	uvm_blocking_put_port #(transaction) send;
+	
+	
+	function new(input string inst = "PROD", uvm_component c);
+		super.new(inst, c);
+		send  = new("PUT", this);
+	endfunction
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		
+		for(i = 0; i < 10; i++) begin
+			#40;
+			t.randomize();
+			`uvm_info("PROD", "DATA Sent",UVM_NONE);  
+			t.print(uvm_default_line_printer);
+			send.put(t);
+		end
+		
+		phase.drop_objection(phase);
+	endtask
+	
+endclass
+	
+class consumer extends uvm_component;
+	`uvm_component_utils(consumer)
+	transaction data;
+	integer i;
+	
+	
+	uvm_blocking_get_port #(transaction)  recv;
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		data = transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	function new(input string inst = "CONS", uvm_component c);
+		super.new(inst, c);
+		recv  = new("RECV", this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+	
+		forever begin		//However, raise_objection and drop_objection are preferrable
+			#40;
+			recv.get(data);
+			`uvm_info("CONS", "DATA Taken out",UVM_NONE); 
+			data.print(uvm_default_line_printer);
+		end
+	endtask
+	
+endclass
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	producer p;
+	consumer c;
+	
+	uvm_tlm_fifo #(transaction) fifo;
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		p = producer::type_id::create("PROD",this);
+		c = consumer::type_id::create("CONS", this);
+		fifo = new("FIFO",this,20);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		p.send.connect(fifo.put_export);
+		c.recv.connect(fifo.get_export);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+		#40;
+		
+		if(fifo.is_full()) 
+			begin
+			`uvm_info("ENV", "FIFO is Full",UVM_NONE);
+			end
+		else 
+			begin
+			`uvm_info("ENV", "FIFO is not full yet",UVM_NONE);
+			end
+		end
+	endtask
+	
+	
+endclass
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	env e;
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	
+endclass
+	
+module tb2;
+	test t;
+	
+	
+	initial begin
+		t = new("TEST", null);
+		run_test();
+	end
+	
+	
+endmodule
+
+/*-------------------------- ANALYSIS PORT -------------------
+For one to many TLM communication
+
+*/
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+ 
+class transaction extends uvm_sequence_item;
+	
+	
+	rand bit [3:0] a;
+	rand bit [7:0] b;
+	
+	function new(input string inst = "TRANS");
+	super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_int(b, UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+	
+	
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+	transaction t;
+	integer i;
+	
+	uvm_analysis_port #(transaction) send;
+	
+	function new(input string inst = "PROD", uvm_component c);
+		super.new(inst,c);
+		send = new("WRITE",this);
+	endfunction
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+	
+		super.build_phase(phase);
+		t = transaction::type_id::create("trans",this);
+		
+	endfunction
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		
+		for(i =0 ; i < 10 ;i++) begin
+			`uvm_info("PROD", "Data send", UVM_NONE);
+			t.randomize();
+			send.write(t);
+			t.print(uvm_default_line_printer);
+
+		end
+		
+		phase.drop_objection(phase);
+		
+	endtask
+	
+endclass
+	
+	
+	
+class subscriber1 extends uvm_component;
+	`uvm_component_utils(subscriber1)
+	
+	integer i;
+	
+	uvm_analysis_imp #(transaction,subscriber1) recv;
+	
+	function new(input string inst = "SUB1", uvm_component c);
+		super.new(inst,c);
+		recv = new("READ",this);
+	endfunction
+	
+	virtual function void write(input transaction t);
+		`uvm_info("SUB1", "Data rcvd ", UVM_NONE);
+		t.print(uvm_default_line_printer);
+	endfunction
+	
+	
+endclass
+	
+	
+class subscriber2 extends uvm_component;
+	`uvm_component_utils(subscriber2)
+	
+	integer i;
+	
+	uvm_analysis_imp #(transaction,subscriber2) recv;
+	
+	function new(input string inst = "SUB2", uvm_component c);
+		super.new(inst,c);
+		recv = new("READ",this);
+	endfunction
+	
+	virtual function void write(input transaction t);
+		`uvm_info("SUB2", "Data rcvd ", UVM_NONE);
+		t.print(uvm_default_line_printer);
+	endfunction
+	
+	
+endclass
+	
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	producer p;
+	subscriber1 s1;
+	subscriber2 s2;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		p = producer::type_id::create("PROD",this);
+		s1 = subscriber1::type_id::create("S1",this);
+		s2 = subscriber2::type_id::create("S2",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		p.send.connect(s1.recv);
+		p.send.connect(s2.recv);
+	endfunction
+	
+	
+endclass
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	env e;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	
+endclass
+	
+module tb;
+	test t;
+	
+	initial begin
+		t = new("TEST",null);
+		run_test();
+	end
+ 
+endmodule
+
+/*------------------------------------------------------------
+
+Assume you have producer consisting of three data members ( reg [1:0] a = 2'b11, reg [3:0] b = 4'b0100 and reg c = 1'b1 ). Communicate this data to three subscribers with the help of analysis port.  Print the data sent by the producer as well as received by all the subscribers for verification.
+
+*/
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+
+class transaction extends uvm_sequence_item;
+	bit[1:0] a = 2'b11;
+	bit [3:0] b = 4'b0100;
+	bit c = 1'b1;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a,UVM_DEFAULT)
+		`uvm_field_int(b,UVM_DEFAULT)
+		`uvm_field_int(c,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	function new(input string inst="TRANS");
+		super.new(inst);
+	endfunction
+	
+endclass
+	
+class producer extends uvm_component;
+	`uvm_component_utils(producer)
+	uvm_analysis_port #(transaction) send;
+	transaction t;
+	integer i;
+	
+	function new(input string inst="PROD",uvm_component c);
+		super.new(inst,c);
+		send=new("WRITE",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		
+		for(i=0;i<10;i++) begin
+			`uvm_info("PROD","Data sent",UVM_NONE);
+			t.randomize();
+			t.print(uvm_default_line_printer);
+			send.write(t);
+		end
+		
+		phase.drop_objection(phase);
+	endtask
+endclass
+	
+class subscriber1 extends uvm_component;
+	`uvm_component_utils(subscriber1)
+	uvm_analysis_imp #(transaction,subscriber1) recv;
+
+	function new(input string inst="SUB1",uvm_component c);
+		super.new(inst,c);
+		recv=new("READ",this);
+	endfunction
+	
+	virtual function void write(transaction t);
+		`uvm_info("SUB1","Data recv",UVM_NONE);
+		t.print(uvm_default_line_printer);
+	endfunction
+	
+endclass
+	
+class subscriber2 extends uvm_component;
+	`uvm_component_utils(subscriber2)
+	uvm_analysis_imp #(transaction,subscriber2) recv;
+	
+	function new(input string inst="SUB2",uvm_component c);
+		super.new(inst,c);
+		recv=new("READ",this);
+	endfunction
+	
+	virtual function void write(transaction t);
+		`uvm_info("SUB2","Data recv",UVM_NONE);
+		t.print(uvm_default_line_printer);
+	endfunction
+	
+endclass
+	
+class subscriber3 extends uvm_component;
+	`uvm_component_utils(subscriber3)
+	uvm_analysis_imp #(transaction,subscriber3) recv;
+	
+	function new(input string inst="SUB1",uvm_component c);
+		super.new(inst,c);
+		recv=new("READ",this);
+	endfunction
+	
+	virtual function void write(transaction t);
+		`uvm_info("SUB3","Data recv",UVM_NONE);
+		t.print(uvm_default_line_printer);
+	endfunction
+	
+endclass
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	producer p;
+	subscriber1 s1;
+	subscriber2 s2;
+	subscriber3 s3;
+	
+	function new(input string inst="ENV",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		p=producer::type_id::create("PROD",this);
+		s1=subscriber1::type_id::create("SUB1",this);
+		s2=subscriber2::type_id::create("SUB2",this);
+		s3=subscriber3::type_id::create("SUB3",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+	
+	super.connect_phase(phase);
+		p.send.connect(s1.recv);
+		p.send.connect(s2.recv);
+		p.send.connect(s3.recv);
+	endfunction
+	
+endclass
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	env e;
+	
+	function new(input string inst="TEST",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e=env::type_id::create("ENV",this);
+	endfunction
+	
+endclass
+	
+module tb;
+	test t;
+
+	initial begin
+		t=new("TEST",null);
+		run_test();
+	end
+	
+endmodule
+
+
+/*
+
+# KERNEL: ASDB file was created in location /home/runner/dataset.asdb
+# KERNEL: UVM_INFO @ 0: reporter [RNTST] Running test ...
+# KERNEL: UVM_ERROR @ 0: run [TEST_DONE_NOHIER] A non-hierarchical object, 'common.run' (<unknown>) was used in a call to uvm_test_done.raise_objection(). For this objection, a sequence or component is required.
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(45) @ 0: TEST.ENV.PROD [PROD] Data sent
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(66) @ 0: TEST.ENV.SUB1 [SUB1] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(83) @ 0: TEST.ENV.SUB2 [SUB2] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+# KERNEL: UVM_INFO /home/runner/testbench.sv(100) @ 0: TEST.ENV.SUB3 [SUB3] Data recv
+# KERNEL: TRANS: (transaction@433) { a: 'h3  b: 'h4  c: 'h1  } 
+
+*/
+
+
+//------------------------------ INTERFACE COMBINATIONAL CIRCUIT ---------------------------
+
+/////////////////////////////////////// RTL Code ///////////////////////////////
+
+module top (
+  input [3:0] a,
+  input [3:0] b,
+  output [3:0] c
+);
+  
+assign c = a + b;  
+ 
+endmodule
+
+
+///////////////////////////////// Testbench Code ///////////////////////////////
+
+
+
+interface top_if;
+  
+  logic [3:0] a;
+  logic [3:0] b;
+  logic [3:0] c;
+  
+endinterface
+ 
+module top_tb();
+  
+  top_if uif();
+  
+  top uut (.a(uif.a), .b(uif.b), .c(uif.c));		//uut : user defined name
+  
+  initial begin
+    uif.a = 7;
+    uif.b =  8;
+    #10;
+    $display("value of addition : %0d",uif.c);
+   
+  end
+  
+endmodule
+
+// To dump waveforms on the edaplayground
+	initial begin
+		$dumpvars;
+		$dumpfile("dump.vcd");
+	end
+
+
+//Enable "Open EPWave after run if not" option
+
+
+//------------------------ INTERFACE SEQUENTIAL CIRCUIT -----------------------------------
+
+
+////////////////////////////////// RTL CODE //////////////////////////
+
+module top 
+(
+	input clk,
+	input 	[3:0] a,b,
+	output	[7:0] c
+
+);
+	
+	reg [7:0] temp;
+
+	always@(posedge clk) begin
+		
+		temp <= a * b;
+	
+	end 
+	
+	assign c = temp;
+
+endmodule
+
+
+////////////////////////////////////// INTERFACE CODE //////////////////////////
+	
+
+interface top_if();
+  logic clk;
+  logic [3:0] a;
+  logic [3:0] b;
+  logic [7:0] c;
+endinterface
+
+
+
+module tb();
+  
+  top_if uif();
+  
+  top uut (.clk(uif.clk), .a(uif.a), .b(uif.b), .c(uif.c) );
+  
+  
+  //initialize the clock to 0
+  initial begin
+    uif.clk = 0; 
+  end
+  
+  //clocking
+  always#5 uif.clk = ~uif.clk;
+  
+  initial begin
+    #1000;			//Mandatory when using always## for clocking . Otherwise clocking will go on forever
+    $finish;
+  end
+  
+  //setting the input values
+  initial begin
+	uif.a = 4;
+	uif.b = 6;
+	@(posedge uif.clk);
+	$display("Value of multiplication: %0d", uif.c);
+  end
+	
+  initial begin
+	$dumpfile("dump.vcd");
+	$dumpvars;
+  end
+  
+  
+  
+  
+endmodule
+
+/////////////// ANOTHER EXAMPLE OF A MULTIPLIER ////////////
+
+module mul 
+(
+	input clk,
+	input 	[3:0] a,b,
+  output	[4:0] c
+
+);
+	
+  reg [4:0] temp;
+
+	always@(posedge clk) begin
+		
+		temp <= a * b;
+	
+	end 
+	
+	assign c = temp;
+
+endmodule
+
+
+interface top_if;
+  logic [3:0] a;
+  logic [3:0] b;
+  logic [4:0] c;
+  logic clk;
+endinterface
+ 
+module top(top_if intf);
+  
+  
+  always@(posedge intf.clk) begin
+    intf.c <= intf.a + intf.b;
+  end
+  
+  
+endmodule
+
+
+module top_tb;
+  
+  top_if uif();
+  
+  top uut(.intf(uif));
+  
+  initial begin
+    uif.clk = 0;
+    uif.a = 8;
+    uif.b = 8;
+  end
+  
+  always#5 uif.clk = ~uif.clk;
+  
+  initial begin
+    #500;
+    $finish;
+  end
+  
+  initial begin
+  $dumpfile("dump.vcd");
+  $dumpvars;
+  end
+  
+  
+  
+  
+endmodule
+
+
+/*-------------------------- USE OF ANALYSIS PORT IN MONITOR AND SCOREBOARD -------------------------
+
+Monitor will collect the values from the DUT, from a virtual interface.
+uvm_analysis_port will require a new function in the constructor as well.
+
+In the scoreboard, we will need a uvm_analysis_imp which will take two args
+1. the type of data object which we will be operating
+2. where we have the implementation of the analysis port, i.e. scoreboard
+
+
+*/
+
+class transaction extends uvm_sequence_item;
+	
+	bit [3:0] a = 4'b1010;
+	bit [3:0] b = 4'b1000;
+	bit [5:0] y = 5'b10010;
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_int(b, UVM_DEFAULT)
+		`uvm_field_int(y, UVM_DEFAULT)
+	`uvm_object_utils_end
+
+
+
+endclass
+
+class monitor extends uvm_monitor;
+	
+	`uvm_component_utils(monitor)
+	
+	uvm_analysis_port #(transaction) send;
+	
+	function new(input string inst = "MOM", uvm_component c);
+		super.new(inst,c);
+		send = new("WRITE", this);
+	endfunction
+	
+	transaction t;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS", this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			send.write(t);	
+			`uvm_info("MON", "Data send to SCOREBOARD", UVM_NONE);
+			#10;
+		phase.drop_objection(phase);
+		
+	endtask
+
+endclass
+
+
+
+
+class scoreboard extends uvm_scoreboard;
+
+	`uvm_component_utils(scoreboard);
+	
+	uvm_analysis_imp #(transaction, scoreboard) recv;
+	
+	//data container: we should get the object of transaction type 
+	transaction data;
+	
+	function new( input string inst = "SCO", uvm_component c);
+		super.new(inst,c);	
+		recv = new("READ", this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		data = transaction::type_id::create("TRANS", this);	//to make the data usable
+	endfunction
+	
+	virtual function void write(input transaction t);
+		data = t; 		//to write in the data whatever is coming from the monitor
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin;
+			#10;
+			if(data.y == data.a + data.b)
+				begin
+					`uvm_info("SCO", "Test passed", UVM_NONE);
+				end
+			else
+				begin
+					`uvm_info("SCO", "Test failed", UVM_NONE);
+				end
+			
+		end
+	endtask
+	
+endclass
+
+class env extends uvm_env;
+	`uvm_component_utils(env);
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+
+	monitor m;
+	scoreboard s;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		m = monitor::type_id::create("MON", this);
+		s = scoreboard::type_id::create("SCO", this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		m.send.connect(s.recv);
+	endfunction
+	
+endclass
+
+
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	function new (input string inst = "TEST", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	env e;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV", this);
+	endfunction
+	
+endclass
+
+
+module tb;
+
+	test t;
+	
+	initial begin
+		t = new("TEST", null);
+		run_test;
+	end
+
+endmodule
+
+//----------------------- EXAMPLE CODE FOR MONITOR AND SCOREBOARD ------------------------------------
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class monitor extends uvm_monitor;
+  `uvm_component_utils(monitor)
+  
+  function new(string name, uvm_component parent);
+    super.new(name,parent);
+  endfunction
+  
+  bit [15:0] dout;
+  
+  uvm_analysis_port#(bit [15:0]) m_analysis_write;
+  
+  function void build_phase(uvm_phase phase);
+    m_analysis_write = new("WRITE",this);
+  endfunction
+  
+  task run_phase(uvm_phase phase);
+    dout = 16'h3333;
+    m_analysis_write.write(dout);
+  endtask
+  
+  
+endclass
+ 
+ 
+ 
+ 
+class scoreboard extends uvm_scoreboard;
+ 
+  `uvm_component_utils(scoreboard)
+  
+  function new(string name = "SCO", uvm_component p = null);
+    super.new(name,p);
+  endfunction
+  
+  uvm_analysis_imp#(bit [15:0] , scoreboard) m_analysis_read;
+  
+  function void build_phase(uvm_phase phase);
+     m_analysis_read = new("READ",this);
+  endfunction
+  
+  function write(bit [15:0] t);
+    `uvm_info("SCO",$sformatf("DATA READ : %0x",t), UVM_NONE);
+  endfunction 
+ 
+  
+endclass
+ 
+ 
+ 
+class env extends uvm_env;
+  
+  `uvm_component_utils(env)
+  
+  monitor m;
+  scoreboard s;
+  
+  function new(string name = "ENV", uvm_component p = null);
+    super.new(name,p);
+  endfunction
+  
+   function void build_phase(uvm_phase phase);
+       m = monitor::type_id::create("MON",this);
+       s = scoreboard::type_id::create("SCO",this);
+  endfunction
+  
+  
+  function void connect_phase(uvm_phase phase);
+    m.m_analysis_write.connect(s.m_analysis_read);
+  endfunction
+  
+endclass
+ 
+ 
+class test extends uvm_test;
+  
+  `uvm_component_utils(test)
+  
+  function new(string name, uvm_component parent);
+    super.new(name,parent);
+  endfunction
+  
+  env e;
+  
+    function void build_phase(uvm_phase phase);
+      e = env::type_id::create("ENV",this);
+   endfunction
+  
+  
+  
+   task run_phase(uvm_phase phase);
+    phase.raise_objection(this);
+    #100;
+    phase.drop_objection(this);
+    endtask
+  
+  
+endclass
+  
+ 
+ 
+  module tb;
+    
+    test t;
+    
+    bit clk;
+    
+    initial begin
+      clk = 0;
+    end
+    
+    always #5 clk = ~clk;
+    
+    initial begin
+      $dumpvars;
+      $dumpfile("dump.vcd");
+      run_test("test");
+    end
+    
+  endmodule
+  
+  //---------------------------------- UVM_CONFIG_DB ---------------------
+  /*
+  
+	
+The uvm_config_db is used when hierarchy is important. With the uvm_config_db, the user not only can add an object to the database, but can also specify, with great detail, the level of access to retrieval by specifying the hierarchy. The classic example of uvm_config_db usage is with sharing a virtual interface.
+  
+	Two methods: set and get
+		- set: create an entry in the database
+		- get: getting an access to the interface
+  
+  */
+  
+  `include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+
+
+ 
+module tb;
+	int d = 12;		//This is what we'll store in the DB, hoping that the rest of the components will have access to this
+	test t;
+	
+	initial begin
+		t = new("TEST",null);
+		uvm_config_db #(int)::set(null,"*","data",d);
+		
+				/*
+				Four arguments needed for set and get methods in uvm_config_db
+					1. uvm_component - because we're inside the testbench "module tb;", we'll specify null
+						- For a get method, we'll be specifying "this" to get the data
+					2. "*", allow all components to gain access to this
+					3. "NAME" - the name by which our class will retrieve the data
+					4. Value - the variable which we want to store
+				
+				*/
+		run_test();
+	end
+	
+endmodule
+
+
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	int data;
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	
+	/*
+		In order to retreive that data, we do it in the build phase 
+		Four args inside get method:
+			1. this
+			2. "", nothing
+			3. "data" - same as mentioned  above
+			4. data - placeholder for the data
+		
+	*/
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		if(!uvm_config_db #(int)::get(this, "", "data",data))
+			`uvm_info("TEST", "Unable to read db", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		`uvm_info("TEST", $sformatf("Value read : %0d",data),UVM_NONE);
+	endtask
+	
+endclass
+ 
+ 
+ /*-------------------------- HOW TO USE UVM_CONFIG_DB --------------------------
+ 
+ THINGS TO DO WHEN USING UVM_CONFIG_DB. STEP BY STEP:
+ 
+ 1st:
+	- When writing the test bench, create a handler for the virtual interface (vif). 
+	- Do the port mapping: connect the vif to the DUT
+	- In the initial begin, set the vif using the uvm_config_db, to give access to all components
+ 
+ 2nd:
+	- In the driver, you will have access to the vif in the build_phase
+	- This can be done by using a get method 
+	- In the parameter parenthesis, "virtual top_if" is being used 
+
+3rd:
+	- In the run_phase of the driver, you will drive the DUT signal with the help of a virtual signal
+
+4th:
+	- In the monitor, gain access to the vif in the build phase by using the get method
+
+ 
+ */
+ 
+ module top(
+  input [3:0] a,b,
+  output [4:0] y
+);
+  
+  assign y = a + b;
+  
+  
+endmodule
+ 
+ 
+ 
+interface top_if();
+  logic [3:0] a;
+  logic [3:0] b;
+  logic [4:0] y;
+  
+endinterface
+ 
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	
+	//removed initialization, not randomizing in this example
+	bit [3:0] a;
+	bit [3:0] b;
+	bit [4:0] y;
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a,UVM_DEFAULT)
+		`uvm_field_int(b,UVM_DEFAULT)
+		`uvm_field_int(y,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	
+endclass
+	
+///////////////////////////////////////////////////////////
+class driver extends uvm_driver;
+	`uvm_component_utils(driver)
+	
+	virtual top_if vif;
+	transaction t;
+	
+	function new(input string inst = "DRV", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS",this);
+		
+		if(!uvm_config_db #(virtual top_if)::get(this, "", "vif",vif))	//2nd step
+			`uvm_info("DRV", "Unable to read db", UVM_NONE);
+	endfunction
+	
+	/*
+		Now from here, when going into the run_phase, the driver will receive a randomized value from a sequence and then apply it to the DUT, but because sequence hasn't been used in the code, we can manually apply some values
+	*/
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			t.a = 4'b1000;
+			t.b = 4'b0001;
+			t.print();			//We'll only be driving the input ports, not the output ports
+			vif.a = t.a;		//3rd step
+			vif.b = t.b;
+		phase.drop_objection(phase); 
+		////Driving the Virtual Interface signals/ net from the Sequence data
+		/// vif.a = trans.a
+	endtask
+	
+endclass
+	
+	//////////////////////////////////////////////////////////
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+	
+	virtual top_if vif;
+	transaction tr;
+	
+	function new(input string inst = "MON", uvm_component c);
+	super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		tr = transaction::type_id::create("TRANS",this);
+		
+		if(!uvm_config_db #(virtual top_if)::get(this, "", "vif",vif))	//4th step
+			`uvm_info("MON", "Unable to read db", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			#10;
+			tr.a = vif.a;
+			tr.b = vif.b;
+			tr.y = vif.y;
+			tr.print();
+		phase.drop_objection(phase); 
+	endtask
+	
+	
+endclass
+/////////////////////////////////////////////////////////////////
+	
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	monitor m;
+	driver d;
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		m  = monitor::type_id::create("MON",this);
+		d = driver::type_id::create("DRV", this);
+	endfunction
+		
+	
+	
+endclass
+	
+	
+///////////////////////////////////////////////
+class test extends uvm_test;
+	`uvm_component_utils(test)  
+	
+	env e;
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("env",this);
+	endfunction
+		
+	
+endclass  
+	
+module tb;
+	
+	top_if vif();
+	top uut (.a(vif.a), .b(vif.b), .y(vif.y));
+	test t;
+	
+	
+	
+	initial begin
+		t = new("TEST",null);
+		uvm_config_db #(virtual top_if)::set(null,"*","vif",vif);  //1st step
+	
+		run_test();
+	end
+	
+endmodule
+////////////////////////////////////////////
+
+/* -------------------------------- ASSIGNMENT ------------------------------
+
+Create Monitor and driver class for the module mentioned in the Instruction tab. Drive the interface with the random stimlus from the driver and observe the response in the monitor class.
+
+module top
+(
+input [7:0] a,
+input [7:0] b,
+input [7:0] c,
+output [7:0] y
+);
+ 
+assign y =  (a & b) | c;
+ 
+endmodule
+
+*/
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+
+module top
+	(
+	input 	[7:0] a,
+	input 	[7:0] b,
+	input 	[7:0] c,
+	output 	[7:0] y
+	);
+	
+	assign y =  (a & b) | c;
+	
+endmodule
+	
+interface top_if();
+	logic [7:0] a;
+	logic [7:0] b;
+	logic [7:0] c;
+	logic [7:0] y;
+endinterface
+	
+class transaction extends uvm_sequence_item;
+	rand bit [7:0] a;
+	rand bit [7:0] b;
+	rand bit [7:0] c;
+	rand bit [7:0] y;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a,UVM_DEFAULT)
+		`uvm_field_int(b,UVM_DEFAULT)
+		`uvm_field_int(c,UVM_DEFAULT)
+		`uvm_field_int(y,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+	function new(input string inst="TRANS");
+		super.new(inst);
+	endfunction
+endclass
+	
+class driver extends uvm_driver;
+	`uvm_component_utils(driver)
+	virtual top_if vif;
+	transaction t;
+	
+	function new(input string inst="DRV",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+		if(!uvm_config_db #(virtual top_if)::get(this,"","vif",vif))
+			`uvm_info("DRV","Unable to read data",UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			t.randomize();
+			
+			//After randomization
+				t.print();
+				vif.a=t.a;
+				vif.b=t.b;
+				vif.c=t.c;
+		phase.drop_objection(phase);
+	endtask
+endclass
+	
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+	uvm_analysis_port #(transaction) send;
+	
+	virtual top_if vif;
+	
+	transaction tr;
+	
+	function new(input string inst="MON",uvm_component c);
+		super.new(inst,c);
+	send=new("WRITE",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		tr=transaction::type_id::create("TRANS",this);
+		if(!uvm_config_db #(virtual top_if)::get(this,"","vif",vif))
+			`uvm_info("MON","Unable to read data",UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			#10;
+			tr.a=vif.a;
+			tr.b=vif.b;
+			tr.c=vif.c;
+			tr.y=vif.y;
+			tr.print();
+		phase.drop_objection(phase);
+	endtask
+endclass
+	
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	driver d;
+	monitor m;
+	
+	function new(input string inst="ENV",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		d=driver::type_id::create("DRV",this);
+		m=monitor::type_id::create("MON",this);
+	endfunction
+	
+endclass
+	
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	env e;
+	
+	function new(input string inst="TEST",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e=env::type_id::create("ENV",this);
+	endfunction
+endclass
+	
+module tb;
+	top_if vif();
+	top uut(.a(vif.a),.b(vif.b),.c(vif.c),.y(vif.y));
+	test t;
+	
+	initial begin
+		t=new("TEST",null);
+		uvm_config_db #(virtual top_if)::set(null,"*","vif",vif);
+		run_test();
+	end
+endmodule
+
+
+/*----------------------- GETTING STARTED WITH THE SEQUENCER AND DRIVER --------------------
+To send stimulus from the sequencer to the driver
+*/
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	
+	rand bit [3:0] a;
+	rand bit [3:0] b;
+	rand bit [4:0] y;
+	
+	//Constructor
+	function new(input string inst = "TRANS");		//uvm_sequence_item requires just 1 arg
+		super.new(inst);
+	endfunction
+	
+	//Registering data members to the UVM factory
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a,UVM_DEFAULT)
+		`uvm_field_int(b,UVM_DEFAULT)
+		`uvm_field_int(y,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+////////////////////////////////////////////////////////////
+	
+	
+//generator will generate the sequence and will send to the driver 
+	
+class generator extends uvm_sequence#(transaction);		
+//parameterized to transaction because this is what will be sent to the driver
+
+	`uvm_object_utils(generator)	//registering to factory
+	
+	transaction t;
+	
+	//Constructor
+	function new(input string inst = "SEQ");
+		super.new(inst);
+	endfunction
+	
+	//All stimuli should be mentioned in the body phase
+	virtual task body();
+		t = transaction::type_id::create("TRANS");	//creating an object to send random stimulus
+		start_item(t);		//blocking method
+			t.randomize();
+			t.print();
+		finish_item(t);
+		`uvm_info("GEN", "Data sent to driver", UVM_NONE);
+	endtask
+	
+endclass
+	
+	
+	
+///////////////////////////////////////////////////////////
+class driver extends uvm_driver #(transaction);
+	`uvm_component_utils(driver)
+	
+	transaction t;		//where the data from the generator will be stored
+	
+	function new(input string inst = "DRV", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			seq_item_port.get_next_item(t);		//getting the data
+			`uvm_info("DRV","Data rcvd from Generator", UVM_NONE);
+			t.print();
+			seq_item_port.item_done();
+			//item_done gives a request to the sequencer to send the next item
+				//item_done doesn't need any argument
+				//If you add an item (e.g trans) in item_done, you might get an overflow error
+			
+		phase.drop_objection(phase); 
+	endtask
+	
+endclass
+	
+	//////////////////////////////////////////////////////////
+	
+class agent extends uvm_agent;
+	`uvm_component_utils(agent)
+	
+	driver d;
+	uvm_sequencer #(transaction) sequencer;
+	
+	function new(input string inst = "AGENT", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		d = driver::type_id::create("DRV",this);
+		sequencer = uvm_sequencer#(transaction)::type_id::create("SEQ",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		
+		/*
+			Here the driver is requesting the new data
+			So we will be connecting the driver to the sequencer
+		*/
+		
+		super.connect_phase(phase);
+		d.seq_item_port.connect(sequencer.seq_item_export);
+	endfunction
+	
+endclass
+	
+	
+///////////////////////////////////////////////////////////
+class env extends uvm_env;
+	
+	agent a;
+	
+	`uvm_component_utils(env)
+	
+	function new(string name = "ENV", uvm_component p);
+		super.new(name,p);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		a = agent::type_id::create("AGENT",this);      	
+	endfunction
+	
+endclass
+/////////////////////////////////////////////////////////////////
+	
+	
+	
+	
+///////////////////////////////////////////////
+class test extends uvm_test;
+	`uvm_component_utils(test)  
+	
+	generator gen;
+	env e; 
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		gen = generator::type_id::create("GEN",this);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		
+		phase.raise_objection(this);
+			gen.start(e.a.sequencer);  	//Telling which sequencer needs to be sent to the DUT
+			
+			//You can have multiple generators this way
+		phase.drop_objection(this);
+		
+	endtask
+		
+	
+endclass  
+	
+module tb; 
+	test t;
+	
+	initial begin
+		t = new("TEST",null);
+		run_test();
+	end
+	
+endmodule
+////////////////////////////////////////////
+ 
+ 
+ 
+///////////////////////////////////////////
+
+
+
+
+//--------------------- 4 BIT ADDER -------------------------
+
+// Code your design here
+ 
+module add(
+
+	input [3:0] a,b,
+	output [4:0] y
+    );
+	
+	assign y = a + b;    
+	
+endmodule
+ 
+////////////////////////////////////////////////////////////
+interface add_if();			//creating an interface for our RTL
+	logic [3:0] a;
+	logic [3:0] b;
+	logic [4:0] y;
+endinterface
+ 
+////////////////////////////////////////////////////////////////////////////////
+ 
+`timescale 1ns / 1ps
+ 
+ 
+/////////////////////////Transaction
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	rand bit [3:0] a;
+	rand bit [3:0] b;
+	bit [4:0] y;
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(a, UVM_DEFAULT)
+		`uvm_field_int(b, UVM_DEFAULT)
+		`uvm_field_int(y, UVM_DEFAULT)
+	`uvm_object_utils_end
+ 
+endclass
+ 
+//////////////////////////////////////////////////////////////
+class generator extends uvm_sequence #(transaction);
+	`uvm_object_utils(generator)
+	
+	transaction t;
+	integer i;
+	
+	function new(input string inst = "GEN");
+		super.new(inst);
+	endfunction
+	
+	//You don't have run_phase and build_phase in generator
+	virtual task body();
+		t = transaction::type_id::create("TRANS");
+		for(i =0; i< 10; i++) begin		//10 random transactions
+			start_item(t);
+				t.randomize();
+				`uvm_info("GEN", "Data sent to driver", UVM_NONE);
+				t.print();
+				#10;
+			finish_item(t);
+		end
+	endtask
+ 
+endclass
+ 
+////////////////////////////////////////////////////////////////////
+class driver extends uvm_driver #(transaction);
+	`uvm_component_utils(driver)
+	
+	function new(input string inst = " DRV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	transaction data;
+	virtual add_if aif;
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		data = transaction::type_id::create("TRANS");
+		if(!uvm_config_db #(virtual add_if)::get(this,"","aif",aif)) 
+			`uvm_info("DRV","Unable to access uvm_config_db",UVM_NONE);
+	endfunction
+	
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			seq_item_port.get_next_item(data);
+			aif.a = data.a;
+			aif.b = data.b;
+			`uvm_info("DRV", "Trigger DUT", UVM_NONE);
+			data.print();
+			seq_item_port.item_done();
+		end
+	endtask
+endclass
+ 
+////////////////////////////////////////////////////////////////////////
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+	
+	uvm_analysis_port #(transaction) send;
+	
+	function new(input string inst = "MON", uvm_component c);
+		super.new(inst, c);
+		send = new("Write", this);
+	endfunction
+	
+	transaction t;
+	virtual add_if aif;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+		if(!uvm_config_db #(virtual add_if)::get(this,"","aif",aif)) 
+			`uvm_info("MON","Unable to access uvm_config_db",UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			#10;
+			t.a = aif.a;
+			t.b = aif.b;
+			t.y = aif.y;
+			`uvm_info("MON", "Data send to Scoreboard", UVM_NONE);
+			t.print();
+			send.write(t);
+		end
+	endtask
+endclass
+ 
+///////////////////////////////////////////////////////////////////////
+class scoreboard extends uvm_scoreboard;
+	`uvm_component_utils(scoreboard)
+	
+	uvm_analysis_imp #(transaction,scoreboard) recv;
+	
+	transaction data;
+	
+	function new(input string inst = "SCO", uvm_component c);
+		super.new(inst, c);
+		recv = new("Read", this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		data = transaction::type_id::create("TRANS");
+	endfunction
+	
+	virtual function void write(input transaction t);
+		data = t;
+		`uvm_info("SCO","Data rcvd from Monitor", UVM_NONE);
+		data.print();
+		
+		//COMPARISON 
+		if(data.y == data.a + data.b)
+			`uvm_info("SCO","Test Passed", UVM_NONE)
+		else
+			`uvm_info("SCO","Test Failed", UVM_NONE);
+	endfunction
+endclass
+////////////////////////////////////////////////
+ 
+class agent extends uvm_agent;
+	`uvm_component_utils(agent)
+	
+	
+	function new(input string inst = "AGENT", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	monitor m;
+	driver d;
+	uvm_sequencer #(transaction) seq;
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		m = monitor::type_id::create("MON",this);
+		d = driver::type_id::create("DRV",this);
+		seq = uvm_sequencer #(transaction)::type_id::create("SEQ",this);
+	endfunction
+	
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		d.seq_item_port.connect(seq.seq_item_export);
+	endfunction
+endclass
+ 
+/////////////////////////////////////////////////////
+ 
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	scoreboard s;
+	agent a;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		s = scoreboard::type_id::create("SCO",this);
+		a = agent::type_id::create("AGENT",this);
+	endfunction
+	
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		a.m.send.connect(s.recv);
+	endfunction
+	
+endclass
+ 
+////////////////////////////////////////////
+ 
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst, c);
+	endfunction
+	
+	generator gen;
+	env e;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		gen = generator::type_id::create("GEN",this);
+		e = env::type_id::create("ENV",this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+			gen.start(e.a.seq);
+			#10;
+		phase.drop_objection(phase);
+	endtask
+endclass
+//////////////////////////////////////
+ 
+module add_tb();
+	test t;
+	add_if aif();
+	
+	add dut (.a(aif.a), .b(aif.b), .y(aif.y));
+	
+	initial begin
+		$dumpfile("dump.vcd");
+		$dumpvars;  
+		t = new("TEST",null);
+		uvm_config_db #(virtual add_if)::set(null, "*", "aif", aif);
+		run_test();
+	end
+ 
+endmodule
+
+
+///////////////////////// ASSIGNMENT ////////////////////////
+
+module au
+(
+  input [1:0] mode,
+  input [3:0] a,b,
+  output reg [7:0] y
+);
+  
+  always@(*)
+    begin
+      case(mode)
+        2'b00: y = a + b;
+        2'b01: y = a - b;
+        2'b10: y = a * b;
+        2'b11: y = a / b;
+      endcase
+    end
+endmodule  
+
+//---------------------------------------------------
+
+//////////////////// RTL ///////////////////
+
+module au
+(
+  input [1:0] mode,
+  input [3:0] a,b,
+  output reg [7:0] y
+);
+  
+  always@(*)
+    begin
+      case(mode)
+        2'b00: y = a + b;
+        2'b01: y = a - b;
+        2'b10: y = a * b;
+        2'b11: y = a / b;
+      endcase
+    end
+endmodule  
+
+////////////////////////////////////
+
+interface au_if();
+	logic [1:0] mode;
+	logic [3:0] a;
+	logic [3:0] b;
+	logic [7:0] y;
+endinterface 
+
+//////////////////// TESTBENCH /////////////////
+
+`timescale 1ns/1ps
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+
+class transaction extends uvm_sequence_item;
+	rand bit [1:0] mode;
+	rand bit  [3:0] a;
+	rand bit  [3:0] b;
+	bit [7:0] y;
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(mode,UVM_DEFAULT);
+		`uvm_field_int(a,UVM_DEFAULT);
+		`uvm_field_int(b,UVM_DEFAULT);
+		`uvm_field_int(y,UVM_DEFAULT);
+	`uvm_object_utils_end
+	
+	function new(input string inst="TRANS");
+		super.new(inst);
+	endfunction
+endclass
+
+class generator extends uvm_sequence#(transaction);
+	`uvm_object_utils(generator)
+	transaction t;
+	
+	integer i;
+	
+	function new(input string inst="GEN");
+		super.new(inst);
+	endfunction
+	
+	virtual task body();
+		t=transaction::type_id::create("TRANS");
+		for(i=0;i<10;i++) begin
+			start_item(t);
+				t.randomize();
+				`uvm_info("GEN","Data sent to driver",UVM_NONE);
+				t.print(uvm_default_line_printer);
+				#10;
+			finish_item(t);
+		end
+	endtask
+endclass
+
+class driver extends uvm_driver #(transaction);
+	`uvm_component_utils(driver)
+	transaction t;
+	virtual au_if vif;
+	
+	function new(input string inst="DRV",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+		if(!uvm_config_db #(virtual au_if)::get(this,"","vif",vif))
+			`uvm_info("DRV","Unable to read data",UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			seq_item_port.get_next_item(t);
+			vif.mode=t.mode;
+			vif.a=t.a;
+			vif.b=t.b;
+			`uvm_info("DRV","Trigger DUT",UVM_NONE);
+			t.print(uvm_default_line_printer);
+			seq_item_port.item_done();
+		end 
+	endtask
+endclass
+
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+	uvm_analysis_port #(transaction) send;
+	transaction t;
+	virtual au_if vif;
+	
+	function new(input string inst="MON",uvm_component c);
+		super.new(inst,c);
+		send=new("WRITE",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+		if(!uvm_config_db #(virtual au_if)::get(this,"","vif",vif))
+			`uvm_info("DRV","Unable to read data",UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			#10;
+			t.mode=vif.mode;
+			t.a=vif.a;
+			t.b=vif.b;
+			t.y=vif.y;
+			`uvm_info("MON","Data sent to scoreboard",UVM_NONE);
+			send.write(t);
+		end
+	endtask
+endclass
+
+class scoreboard extends uvm_scoreboard;
+	`uvm_component_utils(scoreboard)
+	transaction t;
+	uvm_analysis_imp #(transaction,scoreboard) recv;
+	
+	function new(input string inst="SCO",uvm_component c);
+	super.new(inst,c);
+	recv=new("READ",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t=transaction::type_id::create("TRANS",this);
+	endfunction
+	
+	virtual function void write(input transaction t);
+		t.print(uvm_default_line_printer);
+		`uvm_info("SCO","Data received from monitor",UVM_NONE);
+		if(t.mode==2'b00 && t.y==t.a+t.b) begin
+			`uvm_info("SCO","Test Passed",UVM_NONE);end
+		else if(t.mode==2'b01 && t.y==t.a-t.b)begin
+			`uvm_info("SCO","Test Passed",UVM_NONE);end
+		else if(t.mode==2'b10 && t.y==t.a*t.b)begin
+			`uvm_info("SCO","Test Passed",UVM_NONE);end
+		else if(t.mode==2'b11 && t.y==t.a/t.b)begin
+			`uvm_info("SCO","Test Passed",UVM_NONE);end
+		else begin
+			`uvm_info("SCO","Test Failed",UVM_NONE);end
+	endfunction
+endclass
+
+class agent extends uvm_agent;
+	`uvm_component_utils(agent)
+	driver d;
+	monitor m;
+	uvm_sequencer #(transaction) sequencer;
+	
+	function new(input string inst="AGENT",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		d=driver::type_id::create("DRV",this);
+		m=monitor::type_id::create("MON",this);
+		sequencer=uvm_sequencer #(transaction)::type_id::create("SEQ",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		d.seq_item_port.connect(sequencer.seq_item_export);
+	endfunction
+endclass
+
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	scoreboard s;
+	agent a;
+	
+	function new(input string inst="ENV",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		s=scoreboard::type_id::create("SCO",this);
+		a=agent::type_id::create("AGENT",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		a.m.send.connect(s.recv);
+	endfunction
+endclass
+
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	env e;
+	generator g;
+	
+	function new(input string inst="TEST",uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e=env::type_id::create("ENV",this);
+		g=generator::type_id::create("GEN",this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		#10;
+		g.start(e.a.sequencer);
+		phase.drop_objection(phase);
+	endtask
+endclass
+
+module tb;
+	test t;
+	au_if vif();
+	au uut(.mode(vif.mode),.a(vif.a),.b(vif.b),.y(vif.y));
+	
+	initial begin
+		$dumpfile("dump.vcd");
+		$dumpvars; 
+		t=new("TEST",null);
+		uvm_config_db #(virtual au_if)::set(null,"*","vif",vif);
+		run_test();
+	end
+endmodule
+
+
+//-------------------------------- 8 BIT RAM -------------------------------
+
+
+///////////////// RTL //////////////////
+
+
+module ram(
+	input 	clk, wr,
+	input 	[7:0] din,
+	output reg [7:0] dout,
+	input 	[3:0] addr
+);	
+
+	reg [7:0] mem [15:0];
+
+	initial begin
+		for(i=0; i<16; i++) begin
+			mem[i] = 0;
+		end
+	end
+
+	always@(posedge clk)
+		begin
+			if(wr == 1'b1)
+				mem[addr] <= din;
+			else
+				dout <= mem[addr];
+		end
+
+endmodule
+
+
+interface ram_if();
+	logic clk;
+	logic wr;
+	logic [7:0] din; 
+	logic [7:0] dout;
+	logic [3:0] addr;
+endinterface
+
+
+////////////////// TESTBENCH ///////////////
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	rand bit wr;
+	rand bit [7:0] din;
+	rand bit [3:0] addr;
+	bit [7:0] dout;
+	
+	constraint data_c {addr > 4'b0011; addr < 4'b0101;};
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(wr,UVM_DEFAULT)
+		`uvm_field_int(din,UVM_DEFAULT)
+		`uvm_field_int(addr,UVM_DEFAULT)
+		`uvm_field_int(dout,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+ 
+class generator extends uvm_sequence#(transaction);
+	`uvm_object_utils(generator)
+	
+	transaction t;
+	integer i;
+	
+	function new(input string inst = "GEN");
+		super.new(inst);
+	endfunction
+	
+	virtual task body();
+		t = transaction::type_id::create("TRANS");
+	
+		for(i =0; i< 50; i++) begin
+			start_item(t);
+				t.randomize();
+				`uvm_info("GEN", "Data send to Driver", UVM_NONE);
+				t.print(uvm_default_line_printer);
+			finish_item(t);
+		end
+	endtask
+endclass
+ 
+class driver extends uvm_driver#(transaction);
+	`uvm_component_utils(driver)
+	
+	transaction t;
+	virtual ram_if rif;
+	
+	function new(input string inst = "DRV", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+		if(!uvm_config_db#(virtual ram_if)::get(this,"","rif",rif))
+			`uvm_info("DRV", "Unable to access Interface", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			seq_item_port.get_next_item(t);
+			@(posedge rif.clk);
+				rif.wr = t.wr;
+				rif.din = t.din;
+				rif.addr = t.addr;
+				`uvm_info("DRV","Send data to DUT", UVM_NONE);
+				t.print(uvm_default_line_printer);
+			seq_item_port.item_done();
+		end
+	endtask
+ 
+endclass
+ 
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+	
+	uvm_analysis_port #(transaction) send;
+	virtual ram_if rif;
+	transaction t;
+	
+	function new(input string inst = "MON", uvm_component c);
+		super.new(inst,c);
+		send = new("WRITE",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+		if(!uvm_config_db#(virtual ram_if)::get(this,"","rif",rif))
+			`uvm_info("MON", "Unable to access Interface", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			@(posedge rif.clk);
+				t.wr = rif.wr;
+				t.din = rif.din;
+				t.addr = rif.addr;
+				t.dout = rif.dout;
+				`uvm_info("MON","Send data to Scoreboard", UVM_NONE);
+				t.print(uvm_default_line_printer);
+				send.write(t);
+		end
+	endtask
+ 
+endclass
+ 
+class scoreboard extends uvm_scoreboard;
+	`uvm_component_utils(scoreboard)
+	
+	uvm_analysis_imp #(transaction,scoreboard) recv;
+	transaction t;
+	
+	
+	function new(input string inst = "SCO", uvm_component c);
+		super.new(inst,c);
+		recv = new("READ",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+	endfunction
+	
+	virtual function void write(input transaction data);
+		t = data;
+		`uvm_info("SCO","Data rcvd from Monitor", UVM_NONE);
+	t.print(uvm_default_line_printer);
+	
+	endfunction
+	
+endclass
+ 
+class agent extends uvm_agent;
+	`uvm_component_utils(agent)
+	
+	function new(input string inst = "AGENT", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	monitor m;
+	driver d;
+	uvm_sequencer #(transaction) seq;
+	
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		m = monitor::type_id::create("MON",this);
+		d = driver::type_id::create("DRV",this);
+		seq = uvm_sequencer #(transaction)::type_id::create("SEQ",this);
+	endfunction
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		d.seq_item_port.connect(seq.seq_item_export);
+	endfunction
+endclass
+ 
+ 
+class env extends uvm_env;
+	`uvm_component_utils(env)
+	
+	function new(input string inst = "ENV", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	scoreboard s;
+	agent a;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		a = agent::type_id::create("AGENT",this);
+		s = scoreboard::type_id::create("SCO",this);
+	endfunction
+	
+	
+	virtual function void connect_phase(uvm_phase phase);
+		super.connect_phase(phase);
+		a.m.send.connect(s.recv);
+	endfunction
+endclass
+ 
+ 
+class test extends uvm_test;
+	`uvm_component_utils(test)
+	
+	function new(input string inst = "TEST", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	generator gen;
+	env e;
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		e = env::type_id::create("ENV",this);
+		gen = generator::type_id::create("GEN",this);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		phase.raise_objection(phase);
+		gen.start(e.a.seq);
+		phase.drop_objection(phase);
+	endtask
+endclass
+	
+	
+module ram_tb;
+	test t;
+	ram_if rif();
+	
+	ram dut (.clk(rif.clk), .wr(rif.wr), .din(rif.din), .dout(rif.dout), .addr(rif.addr));
+	
+	initial begin
+		rif.clk = 0;
+	end
+	
+	always#10 rif.clk = ~rif.clk;
+	
+	initial begin
+		t = new("TEST", null);
+		uvm_config_db #(virtual ram_if)::set(null, "*", "rif", rif);
+		run_test();
+	end
+	
+	initial begin
+		$dumpfile("dump.vcd");
+		$dumpvars;
+	end
+	
+endmodule
+
+/*--------------- TO DEVELOP THE SAME CODE BUT NOW WITH VALID GOLDEN DATA FOR SCOREBOARD --------------
+
+Challenge: we saw that writing data into memory takes 1 clock cycle, and for the late clock cycle, we see garbage data in dout. 
+
+We will update the monitor. 
+
+We later see that the monitor and driver are running twice because of the extra clock cycle. So we will update the driver to adjust for that clock cycle. 
+
+The correct flow should be GEN -> DRV -> MON -> SCO
+
+
+SCO of a RAM is not that simple either... 
+
+
+*/
+
+
+`include "uvm_macros.svh"
+import uvm_pkg::*;
+ 
+class transaction extends uvm_sequence_item;
+	rand bit wr;
+	rand bit [7:0] din;
+	rand bit [3:0] addr;
+	bit [7:0] dout;
+	
+	constraint addr_C {addr > 2; addr < 8;};
+	
+	function new(input string inst = "TRANS");
+		super.new(inst);
+	endfunction
+	
+	`uvm_object_utils_begin(transaction)
+		`uvm_field_int(wr,UVM_DEFAULT)
+		`uvm_field_int(din,UVM_DEFAULT)
+		`uvm_field_int(addr,UVM_DEFAULT)
+		`uvm_field_int(dout,UVM_DEFAULT)
+	`uvm_object_utils_end
+	
+endclass
+	
+	class generator extends uvm_sequence#(transaction);
+	`uvm_object_utils(generator)
+	
+	transaction t;
+	integer i;
+	
+	function new(input string inst = "GEN");
+		super.new(inst);
+	endfunction
+	
+	virtual task body();
+		t = transaction::type_id::create("TRANS");
+		for(i =0; i< 50; i++) begin
+			start_item(t);
+			t.randomize();
+			`uvm_info("GEN", "Data send to Driver", UVM_NONE);
+			t.print(uvm_default_line_printer);
+			finish_item(t);
+			#20;
+		end
+	endtask
+	endclass
+	
+class driver extends uvm_driver#(transaction);
+	`uvm_component_utils(driver)
+	
+	transaction t;
+	virtual ram_if rif;
+	
+	function new(input string inst = "DRV", uvm_component c);
+		super.new(inst,c);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+		if(!uvm_config_db#(virtual ram_if)::get(this,"","rif",rif))
+			`uvm_info("DRV", "Unable to access Interface", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			seq_item_port.get_next_item(t);
+			rif.wr = t.wr;
+			rif.din = t.din;
+			rif.addr = t.addr;
+			`uvm_info("DRV","Send data to DUT", UVM_NONE);
+			t.print(uvm_default_line_printer);
+			seq_item_port.item_done();
+			@(posedge rif.clk);
+			
+			if(t.wr == 1'b0)
+				@(posedge rif.clk);
+				
+		end
+	endtask
+	
+endclass
+	
+class monitor extends uvm_monitor;
+	`uvm_component_utils(monitor)
+	
+	uvm_analysis_port #(transaction) send;
+	virtual ram_if rif;
+	transaction t;
+	
+	function new(input string inst = "MON", uvm_component c);
+		super.new(inst,c);
+		send = new("WRITE",this);
+	endfunction
+	
+	virtual function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		t = transaction::type_id::create("TRANS");
+		if(!uvm_config_db#(virtual ram_if)::get(this,"","rif",rif))
+			`uvm_info("MON", "Unable to access Interface", UVM_NONE);
+	endfunction
+	
+	virtual task run_phase(uvm_phase phase);
+		forever begin
+			@(posedge rif.clk);  
+			t.wr = rif.wr;
+			t.din = rif.din;
+			t.addr = rif.addr;
+			//t.dout = rif.dout;
+			
+			if(rif.wr == 1'b0) begin
+				@(posedge rif.clk)
+				t.dout = rif.dout;
+			end 
+				
+			
+			`uvm_info("MON","Send data to Scoreboard", UVM_NONE);
+			t.print(uvm_default_line_printer);
+			send.write(t);
+			
+		end
+	endtask
+	
+endclass
+ 
+class scoreboard extends uvm_scoreboard;
+`uvm_component_utils(scoreboard)
+ 
+uvm_analysis_imp #(transaction,scoreboard) recv;
+//transaction data;
+ 
+  reg [7:0] tarr[20] = '{default:0} ;	//storing golden data into an array 
+ 
+function new(input string inst = "SCO", uvm_component c);
+super.new(inst,c);
+recv = new("READ",this);
+endfunction
+ 
+//virtual function void build_phase(uvm_phase phase);
+//super.build_phase(phase);
+////data = transaction::type_id::create("TRANS");
+//endfunction
+ 
+virtual function void write(transaction data);
+`uvm_info("SCO","Data rcvd from Monitor", UVM_NONE);
+data.print(uvm_default_line_printer);                        
+  
+  if(data.wr == 1'b1)
+    begin
+      tarr[data.addr] = data.din;
+      `uvm_info("SCO", $sformatf("Data Write oper din : %0h and tarr[addr] : %0h", data.din,tarr[data.addr]), UVM_NONE);    
+    end 
+ 
+  if(data.wr == 1'b0)
+    begin
+  
+      if(data.dout == tarr[data.addr])
+        `uvm_info("SCO", "Test Passed", UVM_NONE)
+      else
+        `uvm_error("SCO", "TEST Failed")
+      
+            `uvm_info("SCO", $sformatf("DATA read oper dout :%0h and tarr[addr] : %0h", data.dout, tarr[data.addr]), UVM_NONE);  
+    end
+  
+  
+endfunction
+  
+  
+ 
+endclass
+ 
+class agent extends uvm_agent;
+`uvm_component_utils(agent)
+ 
+function new(input string inst = "AGENT", uvm_component c);
+super.new(inst,c);
+endfunction
+ 
+monitor m;
+driver d;
+uvm_sequencer #(transaction) seq;
+ 
+ 
+virtual function void build_phase(uvm_phase phase);
+super.build_phase(phase);
+m = monitor::type_id::create("MON",this);
+d = driver::type_id::create("DRV",this);
+seq = uvm_sequencer #(transaction)::type_id::create("SEQ",this);
+endfunction
+ 
+virtual function void connect_phase(uvm_phase phase);
+super.connect_phase(phase);
+d.seq_item_port.connect(seq.seq_item_export);
+endfunction
+endclass
+ 
+ 
+class env extends uvm_env;
+`uvm_component_utils(env)
+ 
+function new(input string inst = "ENV", uvm_component c);
+super.new(inst,c);
+endfunction
+ 
+scoreboard s;
+agent a;
+ 
+virtual function void build_phase(uvm_phase phase);
+super.build_phase(phase);
+a = agent::type_id::create("AGENT",this);
+s = scoreboard::type_id::create("SCO",this);
+endfunction
+ 
+ 
+virtual function void connect_phase(uvm_phase phase);
+super.connect_phase(phase);
+a.m.send.connect(s.recv);
+endfunction
+endclass
+ 
+ 
+class test extends uvm_test;
+`uvm_component_utils(test)
+ 
+function new(input string inst = "TEST", uvm_component c);
+super.new(inst,c);
+endfunction
+ 
+generator gen;
+env e;
+ 
+virtual function void build_phase(uvm_phase phase);
+super.build_phase(phase);
+e = env::type_id::create("ENV",this);
+gen = generator::type_id::create("GEN",this);
+endfunction
+ 
+virtual task run_phase(uvm_phase phase);
+phase.raise_objection(this);
+gen.start(e.a.seq);
+phase.drop_objection(this);
+endtask
+endclass
+ 
+ 
+module ram_tb;
+test t;
+ram_if rif();
+ 
+ram dut (.clk(rif.clk), .wr(rif.wr), .din(rif.din), .dout(rif.dout), .addr(rif.addr));
+ 
+initial begin
+rif.clk = 0;
+end
+ 
+always#10 rif.clk = ~rif.clk;
+ 
+initial begin
+t = new("TEST", null);
+uvm_config_db #(virtual ram_if)::set(null, "*", "rif", rif);
+run_test();
+end
+ 
+endmodule
+
+
+//-------------------------------- END ---------------------------------
+
